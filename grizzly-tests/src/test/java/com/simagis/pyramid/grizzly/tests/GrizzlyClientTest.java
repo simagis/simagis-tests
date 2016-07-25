@@ -2,10 +2,7 @@ package com.simagis.pyramid.grizzly.tests;
 
 import org.glassfish.grizzly.Connection;
 import org.glassfish.grizzly.filterchain.*;
-import org.glassfish.grizzly.http.HttpClientFilter;
-import org.glassfish.grizzly.http.HttpContent;
-import org.glassfish.grizzly.http.HttpRequestPacket;
-import org.glassfish.grizzly.http.Protocol;
+import org.glassfish.grizzly.http.*;
 import org.glassfish.grizzly.impl.FutureImpl;
 import org.glassfish.grizzly.impl.SafeFutureImpl;
 import org.glassfish.grizzly.nio.transport.TCPNIOTransport;
@@ -23,7 +20,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
-public class SimpleClientTest {
+public class GrizzlyClientTest {
     private final static boolean START_TRANSPORT_EVERY_TIME = false;
 
     final URI uri;
@@ -32,7 +29,7 @@ public class SimpleClientTest {
     ByteArrayOutputStream serverBytes = null;
     TCPNIOTransport transport;
 
-    SimpleClientTest(URI uri, String resultFileName) throws IOException {
+    GrizzlyClientTest(URI uri, String resultFileName) throws IOException {
         this.uri = uri;
         this.resultFileName = resultFileName;
         if (uri.getPath().isEmpty()) {
@@ -50,7 +47,14 @@ public class SimpleClientTest {
         long t1 = System.nanoTime();
         FilterChainBuilder clientFilterChainBuilder = FilterChainBuilder.stateless();
         clientFilterChainBuilder.add(new TransportFilter());
-        clientFilterChainBuilder.add(new HttpClientFilter());
+        final HttpClientFilter httpClientFilter = new HttpClientFilter();
+        for (ContentEncoding encoding : httpClientFilter.getContentEncodings()) {
+            System.out.println("Available content encoding: " + encoding);
+        }
+        for (TransferEncoding encoding : httpClientFilter.getTransferEncodings()) {
+            System.out.println("Available transfer encoding: " + encoding);
+        }
+        clientFilterChainBuilder.add(httpClientFilter);
         clientFilterChainBuilder.add(new BaseFilter() {
             @Override
             public NextAction handleConnect(FilterChainContext ctx) throws IOException {
@@ -58,7 +62,8 @@ public class SimpleClientTest {
                 System.out.println("Connected to " + host + ":" + port + "; getting " + uri);
                 final HttpRequestPacket httpRequest = HttpRequestPacket.builder().method("GET")
                     .uri(uri.getPath()).query(uri.getQuery()).protocol(Protocol.HTTP_1_1)
-                    .header("Host", SimpleClientTest.this.uri.getHost()) // mandatory since HTTP 1.1
+                    .header("Host", GrizzlyClientTest.this.uri.getHost()) // mandatory since HTTP 1.1
+                    .header("accept-encoding", "gzip")
                     .build();
                 ctx.write(httpRequest);
                 System.out.println("Sending request " + httpRequest);
@@ -147,12 +152,12 @@ public class SimpleClientTest {
 
     public static void main(String[] args) throws Exception {
         if (args.length < 2) {
-            System.out.println("Usage: " + SimpleClientTest.class.getName() + " URL1 [URL2] result-file");
+            System.out.println("Usage: " + GrizzlyClientTest.class.getName() + " URL1 [URL2] result-file");
             return;
         }
 
-        for (int testCount = 0; testCount < 5; testCount++) {
-            new SimpleClientTest(new URI(args[0]), args[1]).doMain();
+        for (int testCount = 0; testCount < 1; testCount++) {
+            new GrizzlyClientTest(new URI(args[0]), args[1]).doMain();
         }
     }
 }

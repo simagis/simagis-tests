@@ -9,7 +9,7 @@ import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Locale;
 
-public class SimpleServerTest {
+public class GrizzlyServerTest {
     public static void main(String[] args) throws IOException {
         HttpServer server = new HttpServer();
         server.addListener(new NetworkListener("grizzy81", "localhost", 81));

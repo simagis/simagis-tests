@@ -1,19 +1,14 @@
 package com.simagis.pyramid.grizzly.tests;
 
 import org.glassfish.grizzly.Connection;
-import org.glassfish.grizzly.WriteHandler;
 import org.glassfish.grizzly.filterchain.*;
+import org.glassfish.grizzly.http.ContentEncoding;
 import org.glassfish.grizzly.http.HttpClientFilter;
-import org.glassfish.grizzly.http.HttpContent;
-import org.glassfish.grizzly.http.HttpRequestPacket;
-import org.glassfish.grizzly.http.Protocol;
-import org.glassfish.grizzly.http.io.NIOOutputStream;
 import org.glassfish.grizzly.http.server.*;
 import org.glassfish.grizzly.nio.transport.TCPNIOTransport;
 import org.glassfish.grizzly.nio.transport.TCPNIOTransportBuilder;
 
 import java.io.IOException;
-import java.nio.ByteBuffer;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
@@ -41,121 +36,51 @@ public class GrizzlyProxyTest {
         final ServerConfiguration configuration = proxyServer.getServerConfiguration();
         configuration.addHttpHandler(
             new HttpHandler() {
-                public void service(Request request, final Response response) throws Exception {
+                public void service(Request request, Response response) throws Exception {
                     System.out.println("Proxying " + request.getRequestURI() + " - " + request.getRequestURL());
-                    System.out.println("port: " + request.getServerPort());
-                    System.out.println("remote port: " + request.getRemotePort());
-                    System.out.println("path info: " + request.getPathInfo());
-                    System.out.println("context: " + request.getContextPath());
-                    System.out.println("query: " + request.getQueryString());
+                    System.out.println("  port: " + request.getServerPort());
+                    System.out.println("  remote port: " + request.getRemotePort());
+                    System.out.println("  path info: " + request.getPathInfo());
+                    System.out.println("  context: " + request.getContextPath());
+                    System.out.println("  query: " + request.getQueryString());
                     for (String name : request.getParameterNames()) {
-                        System.out.printf("%s: %s%n", name, request.getParameter(name));
+                        System.out.printf("    %s: %s%n", name, request.getParameter(name));
                     }
-                    AtomicReference<Connection> connection = new AtomicReference<>();
-                    clientTransport.setProcessor(newClientProcessor(
-                        request, response, connection, serverHost, serverPort));
-                    Future<Connection> connectFuture = clientTransport.connect(serverHost, serverPort);
+                    System.out.println("  headers:");
+                    for (String headerName : request.getHeaderNames()) {
+                        for (String headerValue : request.getHeaders(headerName)) {
+                            System.out.printf("    %s=%s%n", headerName, headerValue);
+                        }
+                    }
+                    final HttpClientFilter httpClientFilter = new HttpClientFilter();
+//                    for (ContentEncoding encoding : httpClientFilter.getContentEncodings()) {
+//                        System.out.println("Removing content encoding: " + encoding);
+//                        httpClientFilter.removeContentEncoding(encoding);
+//                    }
+                    final GrizzlyProxyClientProcessor clientProcessor = new GrizzlyProxyClientProcessor(
+                        clientTransport, request, response, serverHost, serverPort);
+                    final FilterChainBuilder clientFilterChainBuilder = FilterChainBuilder.stateless();
+                    clientFilterChainBuilder.add(new TransportFilter());
+                    clientFilterChainBuilder.add(httpClientFilter);
+                    clientFilterChainBuilder.add(clientProcessor);
+                    clientTransport.setProcessor(clientFilterChainBuilder.build());
+
                     try {
-                        connection.set(connectFuture.get(10, TimeUnit.SECONDS));
-                        System.out.printf("Connected%n");
+                        clientProcessor.connect();
                         response.suspend();
-                        Thread.sleep(1000);
-                        // waiting...
+                        System.out.printf("Requesting %s:%d...%n", serverHost, serverPort);
                     } catch (TimeoutException e) {
                         System.err.println("Timeout while reading target resource");
                     } catch (ExecutionException e) {
                         System.err.println("Error downloading the resource");
                         e.getCause().printStackTrace();
                     }
-                    System.out.printf("Requesting %s:%d...%n", serverHost, serverPort);
                 }
             });
     }
 
     void start() throws IOException {
         proxyServer.start();
-    }
-
-    static FilterChain newClientProcessor(
-        final Request request,
-        final Response response,
-        final AtomicReference<Connection> connection,
-        final String serverHost,
-        final int serverPort)
-    {
-        final NIOOutputStream outputStream = response.getNIOOutputStream();
-
-        final FilterChainBuilder clientFilterChainBuilder = FilterChainBuilder.stateless();
-        clientFilterChainBuilder.add(new TransportFilter());
-        clientFilterChainBuilder.add(new HttpClientFilter());
-        clientFilterChainBuilder.add(new BaseFilter() {
-            boolean firstReply = true;
-
-            @Override
-            public NextAction handleConnect(FilterChainContext ctx) throws IOException {
-                // Write the request asynchronously
-                System.out.println("Connected to " + serverHost + ":" + serverPort);
-                final HttpRequestPacket httpRequest = HttpRequestPacket.builder().method("GET")
-                    .uri(request.getRequestURI())
-                    .query(request.getQueryString())
-                    .protocol(Protocol.HTTP_1_1)
-                    .header("Host", serverHost) //TODO!! all headers
-                    .build();
-                ctx.write(httpRequest);
-                System.out.println("Sending request to server " + httpRequest);
-                return ctx.getStopAction();
-            }
-
-            @Override
-            public NextAction handleRead(FilterChainContext ctx) throws IOException {
-                final HttpContent httpContent = ctx.getMessage();
-                final ByteBuffer byteBuffer = httpContent.getContent().toByteBuffer();
-                System.out.printf("ByteBuffer limit %d, position %d, remaining %d%n",
-                    byteBuffer.limit(), byteBuffer.position(), byteBuffer.remaining());
-                if (firstReply) {
-                    System.out.printf("HTTP response: {%s}%n", httpContent.getHttpHeader());
-                    //TODO!! pass to response
-                    firstReply = false;
-                }
-                final byte[] bytes = new byte[byteBuffer.remaining()];
-                System.out.printf("ByteBuffer limit %d, position %d, remaining %d%n",
-                    byteBuffer.limit(), byteBuffer.position(), byteBuffer.remaining());
-                System.out.printf("Reading %d bytes...%n", bytes.length);
-                byteBuffer.get(bytes);
-                outputStream.notifyCanWrite(new WriteHandler() {
-                    @Override
-                    public void onWritePossible() throws Exception {
-                        outputStream.write(bytes);
-                        if (httpContent.isLast()) {
-                            outputStream.close();
-                            connection.get().close();
-                            if (response.isSuspended()) {
-                                response.resume();
-                                System.out.println("Response is resumed: " + this);
-                            } else {
-                                response.finish();
-                                System.out.println("Response is finished: " + this);
-                            }
-                        }
-                    }
-
-                    @Override
-                    public void onError(Throwable t) {
-
-                    }
-                });
-
-                return ctx.getStopAction();
-            }
-
-            @Override
-            public void exceptionOccurred(FilterChainContext ctx, Throwable error) {
-                super.exceptionOccurred(ctx, error);
-                error.printStackTrace();
-            }
-        });
-        return clientFilterChainBuilder.build();
-
     }
 
     public static void main(String[] args) throws IOException {
