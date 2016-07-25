@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Many images</title>
+</head>
+<body>
+<p>Images:</p>
+<p>
+<script language="JavaScript">
+    var n = 15;
+    for (var i = 0; i < n; i++) {
+        document.writeln("Line " + i + "<br/>");
+        for (var j = 0; j < n; j++) {
+            var color = rgbToHex(Math.round(i * 255.0 / n), Math.round(j * 255.0 / n), 128);
+            document.writeln(
+//                    "<img width=32 height=32 src='http://127.0.0.1:8080/live-json-rpc/images?image=9e0f226f06ffcb5ffd01fe84d6dacfddb241a0d6&region=" +
+//                    + (200000 + i * 2048) + ","
+//                    + (82238 + j * 2048) + ","
+//                    + (200000 + i * 2048 + 2047) + ","
+//                    + (84229 + j * 2048 + 2047) + "&compression=3.8895'/>");
+                    "<img width='50' height='50' border='1' "
+                    + "src='http://localhost:82/" + color + ".png'/>&nbsp;");
+        }
+        document.writeln("<br/>");
+    }
+
+    function rgbToHex(r, g, b) {
+        return "0x" + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
+    }
+</script>
+</p>
+</body>
+</html>

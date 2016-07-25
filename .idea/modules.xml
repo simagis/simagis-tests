@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="ProjectModuleManager">
+    <modules>
+      <module fileurl="file://$PROJECT_DIR$/grizzly-tests/grizzly-tests.iml" filepath="$PROJECT_DIR$/grizzly-tests/grizzly-tests.iml" />
+      <module fileurl="file://$PROJECT_DIR$/netty-tests/netty-tests.iml" filepath="$PROJECT_DIR$/netty-tests/netty-tests.iml" />
+      <module fileurl="file://$PROJECT_DIR$/simagis-tests.iml" filepath="$PROJECT_DIR$/simagis-tests.iml" />
+      <module fileurl="file://$PROJECT_DIR$/vertx-tests/vertx-tests.iml" filepath="$PROJECT_DIR$/vertx-tests/vertx-tests.iml" />
+    </modules>
+  </component>
+</project>
