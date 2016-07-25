@@ -6,8 +6,9 @@ import io.vertx.core.buffer.Buffer;
 import io.vertx.core.http.*;
 
 public class VertxProxyTest {
-    static int PROXY_PORT = 82;
-    static int SERVER_PORT = 8080;
+    final static int PROXY_PORT = 82;
+    final static int SERVER_PORT = 8080;
+    final static String SERVER_HOST = "localhost";
 
     public static void main(String[] args) {
         Vertx vertx = Vertx.vertx();
@@ -18,7 +19,7 @@ public class VertxProxyTest {
             public void handle(HttpServerRequest request) {
                 System.out.println("Proxying request: " + request.uri());
                 HttpClientRequest clientRequest = client.request(
-                    request.method(), SERVER_PORT, "localhost", request.uri(), new Handler<HttpClientResponse>() {
+                    request.method(), SERVER_PORT, SERVER_HOST, request.uri(), new Handler<HttpClientResponse>() {
                         @Override
                         public void handle(HttpClientResponse clientResponse) {
                             System.out.println("Proxying response: " + clientResponse.statusCode());
