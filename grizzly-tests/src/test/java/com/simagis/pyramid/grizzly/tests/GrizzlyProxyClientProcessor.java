@@ -68,7 +68,7 @@ class GrizzlyProxyClientProcessor extends BaseFilter {
             }
         }
         builder.removeHeader("accept-encoding");
-        //TODO!! - why?
+        //TODO!! - why necessary?
         builder.removeHeader("Host");
         builder.header("Host", serverHost + ":" + serverPort);
         final HttpRequestPacket requestToServer = builder.build();

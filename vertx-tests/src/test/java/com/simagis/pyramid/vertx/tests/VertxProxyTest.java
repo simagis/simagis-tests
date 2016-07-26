@@ -50,6 +50,7 @@ public class VertxProxyTest {
                 System.out.println("Client request created: " + clientRequest.uri());
                 clientRequest.setChunked(true);
                 clientRequest.headers().setAll(request.headers());
+                clientRequest.headers().remove("accept-encoding");
                 request.handler(new Handler<Buffer>() {
                     @Override
                     public void handle(Buffer data) {
@@ -63,7 +64,8 @@ public class VertxProxyTest {
                         clientRequest.end();
                     }
                 });
-                System.out.println("Client and server requests customized: " + clientRequest + ", " + request);
+                System.out.println("Clientrequests customized: <<<" + clientRequest.headers()
+                    + ">>> ");
             }
         }).listen(PROXY_PORT);
     }
