@@ -74,8 +74,8 @@ public class GrizzlyClientTest {
             public NextAction handleRead(FilterChainContext ctx) throws IOException {
                 final HttpContent httpContent = ctx.getMessage();
                 final ByteBuffer byteBuffer = httpContent.getContent().toByteBuffer();
-                System.out.printf("ByteBuffer limit %d, position %d, remaining %d%n",
-                    byteBuffer.limit(), byteBuffer.position(), byteBuffer.remaining());
+//                System.out.printf("ByteBuffer limit %d, position %d, remaining %d%n",
+//                    byteBuffer.limit(), byteBuffer.position(), byteBuffer.remaining());
                 if (serverBytes.size() == 0) {
                     System.out.printf("HTTP response: {%s}%n", httpContent.getHttpHeader());
                 }

@@ -32,11 +32,16 @@ public class GrizzlyProxyTest {
         clientTransport.start();
 
         this.proxyServer = new HttpServer();
-        proxyServer.addListener(new NetworkListener("grizzyProxy", "localhost", proxyPort));
+        final NetworkListener listener = new NetworkListener("grizzyProxy", "localhost", proxyPort);
+        proxyServer.addListener(listener);
+        System.out.println("Chunking: " + listener.isChunkingEnabled());
         final ServerConfiguration configuration = proxyServer.getServerConfiguration();
         configuration.addHttpHandler(
             new HttpHandler() {
                 public void service(Request request, Response response) throws Exception {
+//                    if (request.getRequestURI().contains("css")) {
+//                        return;
+//                    }
                     System.out.println("Proxying " + request.getRequestURI() + " - " + request.getRequestURL());
                     System.out.println("  port: " + request.getServerPort());
                     System.out.println("  remote port: " + request.getRemotePort());

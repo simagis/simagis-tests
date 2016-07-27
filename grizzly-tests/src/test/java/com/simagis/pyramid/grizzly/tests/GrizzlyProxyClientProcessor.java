@@ -12,23 +12,38 @@ import org.glassfish.grizzly.http.Protocol;
 import org.glassfish.grizzly.http.io.NIOOutputStream;
 import org.glassfish.grizzly.http.server.Request;
 import org.glassfish.grizzly.http.server.Response;
+import org.glassfish.grizzly.http.util.Header;
 import org.glassfish.grizzly.http.util.MimeHeaders;
 import org.glassfish.grizzly.nio.transport.TCPNIOTransport;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 
 class GrizzlyProxyClientProcessor extends BaseFilter {
+    private static final String PATH_FOR_DEBUG = "/tmp/gpcp/";
+    private static final AtomicLong counter = new AtomicLong();
+    private static final boolean GLOBAL_SYNCHRONIZATION = false;
+    private static final boolean ACCUMULATE_BYTES = false;
+    private static final Lock GLOBAL_LOCK = new ReentrantLock();
+
     private final TCPNIOTransport clientTransport;
     private final Request request;
     private final Response response;
     private final String serverHost;
     private final int serverPort;
     private final NIOOutputStream outputStream;
+    private final ByteArrayOutputStream resultBytes;
     private volatile Connection connection = null;
     private boolean firstReply = true;
 
@@ -44,6 +59,7 @@ class GrizzlyProxyClientProcessor extends BaseFilter {
         this.response = response;
         this.serverHost = serverHost;
         this.serverPort = serverPort;
+        this.resultBytes = new ByteArrayOutputStream();
         this.outputStream = response.getNIOOutputStream();
     }
 
@@ -71,6 +87,7 @@ class GrizzlyProxyClientProcessor extends BaseFilter {
         //TODO!! - why necessary?
         builder.removeHeader("Host");
         builder.header("Host", serverHost + ":" + serverPort);
+//        builder.header("accept-encoding", "gzip");
         final HttpRequestPacket requestToServer = builder.build();
         ctx.write(requestToServer);
         System.out.println("Sending request to server " + requestToServer);
@@ -79,56 +96,118 @@ class GrizzlyProxyClientProcessor extends BaseFilter {
 
     @Override
     public NextAction handleRead(FilterChainContext ctx) throws IOException {
-        final HttpContent httpContent = ctx.getMessage();
-        final ByteBuffer byteBuffer = httpContent.getContent().toByteBuffer();
-        System.out.printf("ByteBuffer limit %d, position %d, remaining %d%n",
-            byteBuffer.limit(), byteBuffer.position(), byteBuffer.remaining());
-        if (firstReply) {
-            final HttpResponsePacket httpHeader = (HttpResponsePacket) httpContent.getHttpHeader();
-            response.setStatus(httpHeader.getHttpStatus());
-            final MimeHeaders headers = httpHeader.getHeaders();
-            for (String headerName : headers.names()) {
-                for (String headerValue : headers.values(headerName)) {
-                    response.addHeader(headerName, headerValue);
-                    //TODO!! what will be in a case of duplicated names? double duplication?
-                }
-            }
-            System.out.println("Setting response headers:");
-            for (String headerName : response.getHeaderNames()) {
-                for (String headerValue : response.getHeaderValues(headerName)) {
-                    System.out.printf("    %s=%s%n", headerName, headerValue);
-                }
-            }
-            firstReply = false;
+        if (GLOBAL_SYNCHRONIZATION) {
+            GLOBAL_LOCK.lock();
         }
-        final byte[] bytes = new byte[byteBuffer.remaining()];
-        System.out.printf("ByteBuffer limit %d, position %d, remaining %d%n",
-            byteBuffer.limit(), byteBuffer.position(), byteBuffer.remaining());
-        System.out.printf("Reading %d bytes...%n", bytes.length);
-        byteBuffer.get(bytes);
-        outputStream.notifyCanWrite(new WriteHandler() {
-            @Override
-            public void onWritePossible() throws Exception {
-                outputStream.write(bytes);
-                if (httpContent.isLast()) {
-                    outputStream.close();
-                    connection.close();
-                    if (response.isSuspended()) {
-                        response.resume();
-                        System.out.println("Response is resumed: " + this);
-                    } else {
-                        response.finish();
-                        System.out.println("Response is finished: " + this);
+        try {
+            final HttpContent httpContent = ctx.getMessage();
+            final ByteBuffer byteBuffer = httpContent.getContent().toByteBuffer();
+//        System.out.printf("ByteBuffer limit %d, position %d, remaining %d%n",
+//            byteBuffer.limit(), byteBuffer.position(), byteBuffer.remaining());
+            final long currentCounter = counter.getAndIncrement();
+            System.out.printf("first: %s, isHeader: %s, isLast: %s, counter: %d%n",
+                firstReply, httpContent.isHeader(), httpContent.isLast(), currentCounter);
+            if (firstReply) {
+                System.out.println("Initial response headers:");
+                for (String headerName : response.getHeaderNames()) {
+                    for (String headerValue : response.getHeaderValues(headerName)) {
+                        System.out.printf("    %s=%s%n", headerName, headerValue);
                     }
                 }
+                final HttpResponsePacket httpHeader = (HttpResponsePacket) httpContent.getHttpHeader();
+                System.out.println("Server response: " + httpHeader);
+                response.setStatus(httpHeader.getHttpStatus());
+                final MimeHeaders headers = httpHeader.getHeaders();
+                final boolean encoded = headers.contains(Header.ContentEncoding);
+                for (String headerName : headers.names()) {
+                    for (String headerValue : headers.values(headerName)) {
+                        if (encoded) {
+                            if ("content-encoding".equalsIgnoreCase(headerName)
+                                || "content-length".equalsIgnoreCase(headerName))
+                            {
+                                continue;
+                                //TODO!! - why necessary?
+                            }
+                        }
+                        response.addHeader(headerName, headerValue);
+                            //TODO!! what will be in a case of duplicated names? double duplication?
+                    }
+                }
+                if (encoded) {
+                    response.addHeader("transfer-encoding", "chunked");
+                    //TODO!! -why necessary??
+                }
+
+                System.out.println("Setting response headers:");
+                for (String headerName : response.getHeaderNames()) {
+                    for (String headerValue : response.getHeaderValues(headerName)) {
+                        System.out.printf("    %s=%s%n", headerName, headerValue);
+                    }
+                }
+                firstReply = false;
+            }
+            final byte[] bytes = new byte[byteBuffer.remaining()];
+            System.out.printf("ByteBuffer limit %d, position %d, remaining %d%n",
+                byteBuffer.limit(), byteBuffer.position(), byteBuffer.remaining());
+            System.out.printf("%d: reading %d bytes%s...%n",
+                currentCounter, bytes.length, httpContent.isLast() ? " (LAST)" : "");
+            byteBuffer.get(bytes);
+
+            final byte[] bytesToClient;
+            if (ACCUMULATE_BYTES) {
+                resultBytes.write(bytes);
+                if (!httpContent.isLast()) {
+                    return ctx.getStopAction();
+                } else {
+                    bytesToClient = resultBytes.toByteArray();
+                }
+            } else {
+                bytesToClient = bytes;
             }
 
-            @Override
-            public void onError(Throwable t) {
+            final Path resultFolder = Paths.get(PATH_FOR_DEBUG);
+            Files.createDirectories(resultFolder);
+            Files.write(resultFolder.resolve(String.format("bytes-%04d", currentCounter)), bytesToClient);
 
+            System.out.printf("%d: notifying about %d bytes%s...%n",
+                currentCounter, bytesToClient.length, httpContent.isLast() ? " (LAST)" : "");
+            // It seems that events in notifyCanWrite are internally synchronized,
+            // and all calls of onWritePossible will be in proper order.
+            outputStream.notifyCanWrite(new WriteHandler() {
+                @Override
+                public void onWritePossible() throws Exception {
+//                    System.out.printf("Sending %d bytes (counter=%d): starting...%n", bytesToClient.length, currentCounter);
+//                    Thread.sleep(new java.util.Random().nextInt(1000));
+                    System.out.printf("Sending %d bytes (counter=%d)...%n", bytesToClient.length, currentCounter);
+                    outputStream.write(bytesToClient);
+//                    Thread.sleep(new java.util.Random().nextInt(1000));
+//                    System.out.printf("Sending %d bytes (counter=%d): done%n", bytesToClient.length, currentCounter);
+                    if (httpContent.isLast()) {
+                        outputStream.close();
+                        connection.close();
+                        if (response.isSuspended()) {
+                            response.resume();
+                            System.out.println("Response is resumed: " + currentCounter);
+                        } else {
+                            response.finish();
+                            System.out.println("Response is finished: " + currentCounter);
+                        }
+                    }
+                }
+
+                @Override
+                public void onError(Throwable t) {
+                    t.printStackTrace();
+                }
+            });
+            System.out.printf("%d: finishing notifying about %d bytes%s...%n",
+                currentCounter, bytesToClient.length, httpContent.isLast() ? " (LAST)" : "");
+            return ctx.getStopAction();
+        } finally {
+            if (GLOBAL_SYNCHRONIZATION) {
+                GLOBAL_LOCK.unlock();
             }
-        });
-        return ctx.getStopAction();
+        }
     }
 
     @Override
