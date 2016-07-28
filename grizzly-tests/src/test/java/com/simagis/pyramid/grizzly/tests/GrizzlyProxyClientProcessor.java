@@ -9,6 +9,7 @@ import org.glassfish.grizzly.http.HttpContent;
 import org.glassfish.grizzly.http.HttpRequestPacket;
 import org.glassfish.grizzly.http.HttpResponsePacket;
 import org.glassfish.grizzly.http.Protocol;
+import org.glassfish.grizzly.http.io.InputBuffer;
 import org.glassfish.grizzly.http.io.NIOOutputStream;
 import org.glassfish.grizzly.http.server.Request;
 import org.glassfish.grizzly.http.server.Response;
@@ -78,6 +79,9 @@ class GrizzlyProxyClientProcessor extends BaseFilter {
         builder.method(request.getMethod());
         builder.uri(request.getRequestURI());
         builder.query(request.getQueryString());
+        builder.contentType(request.getContentType());
+        builder.contentLength(request.getContentLength());
+        builder.chunked(false);
         for (String headerName : request.getHeaderNames()) {
             for (String headerValue : request.getHeaders(headerName)) {
                 builder.header(headerName, headerValue);
@@ -89,8 +93,15 @@ class GrizzlyProxyClientProcessor extends BaseFilter {
         builder.header("Host", serverHost + ":" + serverPort);
 //        builder.header("accept-encoding", "gzip");
         final HttpRequestPacket requestToServer = builder.build();
-        ctx.write(requestToServer);
-        System.out.println("Sending request to server " + requestToServer);
+        final InputBuffer inputBuffer = request.getInputBuffer();
+        final HttpContent.Builder contentBuilder = HttpContent.builder(requestToServer);
+        contentBuilder.content(inputBuffer.getBuffer());
+        contentBuilder.last(true);
+        //TODO!! - still not enough!
+        HttpContent content = contentBuilder.build();
+        System.out.println("Sending request to server: header " + content.getHttpHeader());
+        System.out.println("Sending request to server: buffer " + inputBuffer.getBuffer());
+        ctx.write(content);
         return ctx.getStopAction();
     }
 

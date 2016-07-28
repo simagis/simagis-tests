@@ -1,19 +1,16 @@
 package com.simagis.pyramid.grizzly.tests;
 
-import org.glassfish.grizzly.Connection;
-import org.glassfish.grizzly.filterchain.*;
-import org.glassfish.grizzly.http.ContentEncoding;
+import org.glassfish.grizzly.filterchain.FilterChainBuilder;
+import org.glassfish.grizzly.filterchain.TransportFilter;
 import org.glassfish.grizzly.http.HttpClientFilter;
+import org.glassfish.grizzly.http.HttpRequestPacket;
 import org.glassfish.grizzly.http.server.*;
 import org.glassfish.grizzly.nio.transport.TCPNIOTransport;
 import org.glassfish.grizzly.nio.transport.TCPNIOTransportBuilder;
 
 import java.io.IOException;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
-import java.util.concurrent.atomic.AtomicReference;
 
 public class GrizzlyProxyTest {
     final String serverHost;
@@ -57,6 +54,8 @@ public class GrizzlyProxyTest {
                             System.out.printf("    %s=%s%n", headerName, headerValue);
                         }
                     }
+                    final HttpRequestPacket httpRequestPacket = request.getRequest();
+                    System.out.println("  Request packet: " + httpRequestPacket);
                     final HttpClientFilter httpClientFilter = new HttpClientFilter();
 //                    for (ContentEncoding encoding : httpClientFilter.getContentEncodings()) {
 //                        System.out.println("Removing content encoding: " + encoding);
