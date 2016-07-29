@@ -1,9 +1,11 @@
 package com.simagis.pyramid.grizzly.tests;
 
+import org.glassfish.grizzly.ReadHandler;
 import org.glassfish.grizzly.filterchain.FilterChainBuilder;
 import org.glassfish.grizzly.filterchain.TransportFilter;
 import org.glassfish.grizzly.http.HttpClientFilter;
 import org.glassfish.grizzly.http.HttpRequestPacket;
+import org.glassfish.grizzly.http.io.NIOInputStream;
 import org.glassfish.grizzly.http.server.*;
 import org.glassfish.grizzly.nio.transport.TCPNIOTransport;
 import org.glassfish.grizzly.nio.transport.TCPNIOTransportBuilder;
@@ -61,6 +63,27 @@ public class GrizzlyProxyTest {
 //                        System.out.println("Removing content encoding: " + encoding);
 //                        httpClientFilter.removeContentEncoding(encoding);
 //                    }
+                    if (false) {
+                        final NIOInputStream nioInputStream = request.getNIOInputStream();
+                        nioInputStream.notifyAvailable(new ReadHandler() {
+                            @Override
+                            public void onDataAvailable() throws Exception {
+                                System.out.printf("Request data available: %d%n", nioInputStream.available());
+                            }
+
+                            @Override
+                            public void onError(Throwable throwable) {
+                                throwable.printStackTrace();
+                            }
+
+                            @Override
+                            public void onAllDataRead() throws Exception {
+                                System.out.printf("Request data complete: %d%n", nioInputStream.available());
+                            }
+                        });
+                        return;
+                    }
+
                     final GrizzlyProxyClientProcessor clientProcessor = new GrizzlyProxyClientProcessor(
                         clientTransport, request, response, serverHost, serverPort);
                     final FilterChainBuilder clientFilterChainBuilder = FilterChainBuilder.stateless();

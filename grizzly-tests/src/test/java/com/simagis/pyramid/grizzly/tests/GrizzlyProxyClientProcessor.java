@@ -1,5 +1,7 @@
 package com.simagis.pyramid.grizzly.tests;
 
+import com.sun.xml.internal.bind.v2.util.ByteArrayOutputStreamEx;
+import org.glassfish.grizzly.Buffer;
 import org.glassfish.grizzly.Connection;
 import org.glassfish.grizzly.WriteHandler;
 import org.glassfish.grizzly.filterchain.BaseFilter;
@@ -19,6 +21,7 @@ import org.glassfish.grizzly.nio.transport.TCPNIOTransport;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -93,14 +96,24 @@ class GrizzlyProxyClientProcessor extends BaseFilter {
         builder.header("Host", serverHost + ":" + serverPort);
 //        builder.header("accept-encoding", "gzip");
         final HttpRequestPacket requestToServer = builder.build();
+        final InputStream inputStream = request.getInputStream();
+
         final InputBuffer inputBuffer = request.getInputBuffer();
         final HttpContent.Builder contentBuilder = HttpContent.builder(requestToServer);
-        contentBuilder.content(inputBuffer.getBuffer());
+        final Buffer buffer = inputBuffer.getBuffer();
+//        buffer.rewind();
+        contentBuilder.content(buffer);
+
+        final Path resultFolder = Paths.get(PATH_FOR_DEBUG);
+        Files.createDirectories(resultFolder);
+        Files.write(resultFolder.resolve(String.format("request-bytes-%04d", counter.getAndIncrement())),
+            byteBufferToArray(buffer.toByteBuffer()));
+
         contentBuilder.last(true);
         //TODO!! - still not enough!
         HttpContent content = contentBuilder.build();
         System.out.println("Sending request to server: header " + content.getHttpHeader());
-        System.out.println("Sending request to server: buffer " + inputBuffer.getBuffer());
+        System.out.println("Sending request to server: buffer " + buffer);
         ctx.write(content);
         return ctx.getStopAction();
     }
@@ -157,12 +170,11 @@ class GrizzlyProxyClientProcessor extends BaseFilter {
                 }
                 firstReply = false;
             }
-            final byte[] bytes = new byte[byteBuffer.remaining()];
+            final byte[] bytes = byteBufferToArray(byteBuffer);
             System.out.printf("ByteBuffer limit %d, position %d, remaining %d%n",
                 byteBuffer.limit(), byteBuffer.position(), byteBuffer.remaining());
             System.out.printf("%d: reading %d bytes%s...%n",
                 currentCounter, bytes.length, httpContent.isLast() ? " (LAST)" : "");
-            byteBuffer.get(bytes);
 
             final byte[] bytesToClient;
             if (ACCUMULATE_BYTES) {
@@ -225,5 +237,22 @@ class GrizzlyProxyClientProcessor extends BaseFilter {
     public void exceptionOccurred(FilterChainContext ctx, Throwable error) {
         super.exceptionOccurred(ctx, error);
         error.printStackTrace();
+    }
+
+    private static byte[] byteBufferToArray(ByteBuffer byteBuffer) {
+        final byte[] bytes = new byte[byteBuffer.remaining()];
+        byteBuffer.get(bytes);
+        return bytes;
+    }
+
+    private static byte[] inputStreamToArray(InputStream inputStream) throws IOException {
+        int len;
+        byte[] data = new byte[16384];
+        final ByteArrayOutputStream result = new ByteArrayOutputStream();
+        while ((len = inputStream.read(data, 0, data.length)) != -1) {
+            result.write(data, 0, len);
+        }
+        result.flush();
+        return result.toByteArray();
     }
 }
