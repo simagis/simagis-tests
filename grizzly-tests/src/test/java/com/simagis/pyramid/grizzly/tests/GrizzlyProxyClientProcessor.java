@@ -100,8 +100,8 @@ class GrizzlyProxyClientProcessor extends BaseFilter {
 
         final InputBuffer inputBuffer = request.getInputBuffer();
         final HttpContent.Builder contentBuilder = HttpContent.builder(requestToServer);
-        final Buffer buffer = inputBuffer.getBuffer();
-        buffer.rewind();
+        final Buffer buffer = inputBuffer.readBuffer();
+//        buffer.rewind();
         contentBuilder.content(buffer);
 
         final Path resultFolder = Paths.get(PATH_FOR_DEBUG);

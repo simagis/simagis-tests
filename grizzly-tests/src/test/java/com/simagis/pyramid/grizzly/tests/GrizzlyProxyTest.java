@@ -48,9 +48,10 @@ public class GrizzlyProxyTest {
                     System.out.println("  path info: " + request.getPathInfo());
                     System.out.println("  context: " + request.getContextPath());
                     System.out.println("  query: " + request.getQueryString());
-                    for (String name : request.getParameterNames()) {
-                        System.out.printf("    %s: %s%n", name, request.getParameter(name));
-                    }
+// Very bad idea to read parameters: breaks the request!
+//                    for (String name : request.getParameterNames()) {
+//                        System.out.printf("    %s: %s%n", name, request.getParameter(name));
+//                    }
                     System.out.println("  headers:");
                     for (String headerName : request.getHeaderNames()) {
                         for (String headerValue : request.getHeaders(headerName)) {
