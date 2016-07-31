@@ -23,6 +23,7 @@ public class GrizzlyProxyTest {
     final TCPNIOTransport clientTransport;
 
     GrizzlyProxyTest(String serverHost, int serverPort, int proxyPort) throws IOException {
+        System.out.printf("Starting proxy at port %d (server %s:%d)%n", proxyPort, serverHost, serverPort);
         this.serverHost = serverHost;
         this.serverPort = serverPort;
         this.proxyPort = proxyPort;

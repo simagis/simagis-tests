@@ -22,6 +22,7 @@ public class GrizzlyServerTest {
                 public void service(Request request, final Response response) throws Exception {
                     final SimpleDateFormat format = new SimpleDateFormat("EEE, dd MMM yyyy HH:mm:ss zzz", Locale.US);
                     System.out.println("Processing " + request.getRequestURI() + " - " + request.getRequestURL());
+                    System.out.println("method: " + request.getMethod());
                     System.out.println("port: " + request.getServerPort());
                     System.out.println("remote port: " + request.getRemotePort());
                     System.out.println("path info: " + request.getPathInfo());
@@ -30,6 +31,7 @@ public class GrizzlyServerTest {
                     for (String name : request.getParameterNames()) {
                         System.out.printf("%s: %s%n", name, request.getParameter(name));
                     }
+                    System.out.println("input buffer: " + request.getInputBuffer().getBuffer());
                     final String result = format.format(new Date(System.currentTimeMillis()))
                         + " at " + request.getRequestURI();
                     response.setContentType("text/plain");
