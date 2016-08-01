@@ -12,6 +12,7 @@ import org.glassfish.grizzly.nio.transport.TCPNIOTransportBuilder;
 
 import java.io.IOException;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
 public class GrizzlyProxyTest {
@@ -96,7 +97,15 @@ public class GrizzlyProxyTest {
 
                     try {
                         clientProcessor.connect();
-                        response.suspend();
+                        response.suspend(7, TimeUnit.SECONDS, null, new TimeoutHandler() {
+                            @Override
+                            public boolean onTimeout(Response response) {
+                                System.out.println("TIMEOUT");
+                                response.finish();
+                                //TODO!! how to stop client processor
+                                return true;
+                            }
+                        });
                         System.out.printf("Requesting %s:%d...%n", serverHost, serverPort);
                     } catch (TimeoutException e) {
                         System.err.println("Timeout while reading target resource");

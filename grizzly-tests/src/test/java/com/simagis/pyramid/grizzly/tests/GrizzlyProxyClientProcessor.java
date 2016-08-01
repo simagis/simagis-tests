@@ -85,6 +85,7 @@ class GrizzlyProxyClientProcessor extends BaseFilter {
         builder.contentType(request.getContentType());
         builder.contentLength(request.getContentLength());
         builder.chunked(false);
+        System.out.println("Request headers:");
         for (String headerName : request.getHeaderNames()) {
             for (String headerValue : request.getHeaders(headerName)) {
                 builder.header(headerName, headerValue);
@@ -96,7 +97,6 @@ class GrizzlyProxyClientProcessor extends BaseFilter {
         builder.header("Host", serverHost + ":" + serverPort);
 //        builder.header("accept-encoding", "gzip");
         final HttpRequestPacket requestToServer = builder.build();
-        final InputStream inputStream = request.getInputStream();
 
         final InputBuffer inputBuffer = request.getInputBuffer();
         final HttpContent.Builder contentBuilder = HttpContent.builder(requestToServer);
@@ -111,8 +111,11 @@ class GrizzlyProxyClientProcessor extends BaseFilter {
             requestBytes);
 
         contentBuilder.last(true);
-        //TODO!! - still not enough!
         HttpContent content = contentBuilder.build();
+        System.out.println("Request parameters:");
+        for (String name : request.getParameterNames()) {
+            System.out.printf("    %s: %s%n", name, request.getParameter(name));
+        }
         System.out.println("Sending request to server: header " + content.getHttpHeader());
         System.out.println("Sending request to server: buffer " + buffer);
         ctx.write(content);
