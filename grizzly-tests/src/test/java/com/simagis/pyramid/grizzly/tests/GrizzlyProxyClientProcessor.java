@@ -17,6 +17,7 @@ import org.glassfish.grizzly.http.server.Request;
 import org.glassfish.grizzly.http.server.Response;
 import org.glassfish.grizzly.http.util.Header;
 import org.glassfish.grizzly.http.util.MimeHeaders;
+import org.glassfish.grizzly.memory.Buffers;
 import org.glassfish.grizzly.nio.transport.TCPNIOTransport;
 
 import java.io.ByteArrayOutputStream;
@@ -48,7 +49,7 @@ class GrizzlyProxyClientProcessor extends BaseFilter {
     private final int serverPort;
     private final NIOOutputStream outputStream;
     private final ByteArrayOutputStream resultBytes;
-    private volatile Connection connection = null;
+    volatile Connection connection = null;
     private boolean firstReply = true;
 
     GrizzlyProxyClientProcessor(
@@ -70,6 +71,7 @@ class GrizzlyProxyClientProcessor extends BaseFilter {
     public void connect() throws InterruptedException, ExecutionException, TimeoutException {
         Future<Connection> connectFuture = clientTransport.connect(serverHost, serverPort);
         this.connection = connectFuture.get(10, TimeUnit.SECONDS);
+        connection.setReadTimeout(2, TimeUnit.SECONDS);
         System.out.printf("Connected%n");
     }
 
@@ -98,24 +100,29 @@ class GrizzlyProxyClientProcessor extends BaseFilter {
 //        builder.header("accept-encoding", "gzip");
         final HttpRequestPacket requestToServer = builder.build();
 
-        final InputBuffer inputBuffer = request.getInputBuffer();
-        final HttpContent.Builder contentBuilder = HttpContent.builder(requestToServer);
-        final Buffer buffer = inputBuffer.readBuffer();
-//        buffer.rewind();
-        contentBuilder.content(buffer);
-
+        InputBuffer inputBuffer = request.getInputBuffer();
         final Path resultFolder = Paths.get(PATH_FOR_DEBUG);
         Files.createDirectories(resultFolder);
-        final byte[] requestBytes = byteBufferToArray(buffer.toByteBuffer());
+        final byte[] requestBytes = byteBufferToArray(inputBuffer.readBuffer().toByteBuffer());
         Files.write(resultFolder.resolve(String.format("request-bytes-%04d", counter.getAndIncrement())),
             requestBytes);
 
+
+
+        final HttpContent.Builder contentBuilder = HttpContent.builder(requestToServer);
+        Buffer buffer = Buffers.wrap(null, ByteBuffer.wrap(requestBytes));
+//        buffer.rewind();
+        contentBuilder.content(buffer);
         contentBuilder.last(true);
         HttpContent content = contentBuilder.build();
+
+        final Buffer wrap = Buffers.wrap(null, ByteBuffer.wrap(requestBytes));
+//        request.replayPayload(wrap);
         System.out.println("Request parameters:");
         for (String name : request.getParameterNames()) {
             System.out.printf("    %s: %s%n", name, request.getParameter(name));
         }
+
         System.out.println("Sending request to server: header " + content.getHttpHeader());
         System.out.println("Sending request to server: buffer " + buffer);
         ctx.write(content);
@@ -129,7 +136,8 @@ class GrizzlyProxyClientProcessor extends BaseFilter {
         }
         try {
             final HttpContent httpContent = ctx.getMessage();
-            final ByteBuffer byteBuffer = httpContent.getContent().toByteBuffer();
+            final Buffer buffer = httpContent.getContent();
+            final ByteBuffer byteBuffer = buffer.toByteBuffer();
 //        System.out.printf("ByteBuffer limit %d, position %d, remaining %d%n",
 //            byteBuffer.limit(), byteBuffer.position(), byteBuffer.remaining());
             final long currentCounter = counter.getAndIncrement();

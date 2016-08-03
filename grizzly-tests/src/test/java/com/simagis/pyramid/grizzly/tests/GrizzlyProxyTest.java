@@ -3,6 +3,7 @@ package com.simagis.pyramid.grizzly.tests;
 import org.glassfish.grizzly.ReadHandler;
 import org.glassfish.grizzly.filterchain.FilterChainBuilder;
 import org.glassfish.grizzly.filterchain.TransportFilter;
+import org.glassfish.grizzly.http.ContentEncoding;
 import org.glassfish.grizzly.http.HttpClientFilter;
 import org.glassfish.grizzly.http.HttpRequestPacket;
 import org.glassfish.grizzly.http.io.NIOInputStream;
@@ -29,7 +30,10 @@ public class GrizzlyProxyTest {
         this.serverPort = serverPort;
         this.proxyPort = proxyPort;
 
-        this.clientTransport = TCPNIOTransportBuilder.newInstance().build();
+        this.clientTransport = TCPNIOTransportBuilder.newInstance()
+            .setReadTimeout(5, TimeUnit.SECONDS)
+            .setConnectionTimeout(2000)
+            .build();
         clientTransport.start();
 
         this.proxyServer = new HttpServer();
@@ -102,7 +106,7 @@ public class GrizzlyProxyTest {
                             public boolean onTimeout(Response response) {
                                 System.out.println("TIMEOUT");
                                 response.finish();
-                                //TODO!! how to stop client processor
+                                clientProcessor.connection.close();
                                 return true;
                             }
                         });
