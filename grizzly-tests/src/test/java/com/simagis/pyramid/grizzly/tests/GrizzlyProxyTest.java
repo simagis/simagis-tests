@@ -1,12 +1,10 @@
 package com.simagis.pyramid.grizzly.tests;
 
-import org.glassfish.grizzly.ReadHandler;
 import org.glassfish.grizzly.filterchain.FilterChainBuilder;
 import org.glassfish.grizzly.filterchain.TransportFilter;
 import org.glassfish.grizzly.http.ContentEncoding;
 import org.glassfish.grizzly.http.HttpClientFilter;
 import org.glassfish.grizzly.http.HttpRequestPacket;
-import org.glassfish.grizzly.http.io.NIOInputStream;
 import org.glassfish.grizzly.http.server.*;
 import org.glassfish.grizzly.nio.transport.TCPNIOTransport;
 import org.glassfish.grizzly.nio.transport.TCPNIOTransportBuilder;
@@ -66,10 +64,11 @@ public class GrizzlyProxyTest {
                     final HttpRequestPacket httpRequestPacket = request.getRequest();
                     System.out.println("  Request packet: " + httpRequestPacket);
                     final HttpClientFilter httpClientFilter = new HttpClientFilter();
-//                    for (ContentEncoding encoding : httpClientFilter.getContentEncodings()) {
-//                        System.out.println("Removing content encoding: " + encoding);
-//                        httpClientFilter.removeContentEncoding(encoding);
-//                    }
+                    for (ContentEncoding encoding : httpClientFilter.getContentEncodings()) {
+                        System.out.println("Content encoding: " + encoding);
+                        httpClientFilter.removeContentEncoding(encoding);
+                    }
+                    /*
                     if (false) {
                         final NIOInputStream nioInputStream = request.getNIOInputStream();
                         nioInputStream.notifyAvailable(new ReadHandler() {
@@ -89,7 +88,7 @@ public class GrizzlyProxyTest {
                             }
                         });
                         return;
-                    }
+                    }*/
 
                     final GrizzlyProxyClientProcessor clientProcessor = new GrizzlyProxyClientProcessor(
                         clientTransport, request, response, serverHost, serverPort);
@@ -101,7 +100,7 @@ public class GrizzlyProxyTest {
 
                     try {
                         clientProcessor.connect();
-                        response.suspend(7, TimeUnit.SECONDS, null, new TimeoutHandler() {
+                        response.suspend(30, TimeUnit.SECONDS, null, new TimeoutHandler() {
                             @Override
                             public boolean onTimeout(Response response) {
                                 System.out.println("TIMEOUT");

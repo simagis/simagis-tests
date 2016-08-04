@@ -39,7 +39,7 @@ public class GrizzlyServerTest {
                     new Thread() {
                         @Override
                         public void run() {
-                            for (long t = System.currentTimeMillis(); System.currentTimeMillis() - t < 20000; ) {
+                            for (long t = System.currentTimeMillis(); System.currentTimeMillis() - t < 2000; ) {
                             }
                             final NIOOutputStream outputStream = response.getNIOOutputStream();
                             outputStream.notifyCanWrite(
