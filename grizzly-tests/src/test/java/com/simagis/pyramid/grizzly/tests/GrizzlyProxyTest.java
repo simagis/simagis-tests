@@ -8,6 +8,7 @@ import org.glassfish.grizzly.http.HttpRequestPacket;
 import org.glassfish.grizzly.http.server.*;
 import org.glassfish.grizzly.nio.transport.TCPNIOTransport;
 import org.glassfish.grizzly.nio.transport.TCPNIOTransportBuilder;
+import org.glassfish.grizzly.threadpool.ThreadPoolConfig;
 
 import java.io.IOException;
 import java.util.concurrent.ExecutionException;
@@ -28,10 +29,14 @@ public class GrizzlyProxyTest {
         this.serverPort = serverPort;
         this.proxyPort = proxyPort;
 
-        this.clientTransport = TCPNIOTransportBuilder.newInstance()
-            .setReadTimeout(5, TimeUnit.SECONDS)
-            .setConnectionTimeout(2000)
-            .build();
+        final TCPNIOTransportBuilder transportBuilder = TCPNIOTransportBuilder.newInstance();
+        final ThreadPoolConfig threadPoolConfig =
+            ThreadPoolConfig.defaultConfig().copy()
+                .setCorePoolSize(Runtime.getRuntime().availableProcessors())
+                .setMaxPoolSize(512);
+        transportBuilder.setWorkerThreadPoolConfig(threadPoolConfig);
+        System.out.println("Current thread pool config: " + transportBuilder.getWorkerThreadPoolConfig());
+        this.clientTransport = transportBuilder.build();
         clientTransport.start();
 
         this.proxyServer = new HttpServer();
@@ -103,6 +108,7 @@ public class GrizzlyProxyTest {
                         response.suspend(30, TimeUnit.SECONDS, null, new TimeoutHandler() {
                             @Override
                             public boolean onTimeout(Response response) {
+                                //TODO!! Q: what is the sense of timeout value?
                                 System.out.println("TIMEOUT");
                                 response.finish();
                                 clientProcessor.connection.close();

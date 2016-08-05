@@ -43,7 +43,7 @@ class GrizzlyProxyClientProcessor extends BaseFilter {
     private final TCPNIOTransport clientTransport;
     private final Response response;
     private final HttpRequestPacket requestToServerHeaders;
-    private final byte[] requestToServerBody;
+    private final ByteBuffer requestToServerBody;
     private final String serverHost;
     private final int serverPort;
     private final NIOOutputStream outputStream;
@@ -68,10 +68,10 @@ class GrizzlyProxyClientProcessor extends BaseFilter {
             this.outputStream = response.getNIOOutputStream();
 
             InputBuffer inputBuffer = request.getInputBuffer();
-            this.requestToServerBody = byteBufferToArray(inputBuffer.readBuffer().toByteBuffer());
+            this.requestToServerBody = inputBuffer.readBuffer().toByteBuffer();
 
-            final Buffer wrap = Buffers.wrap(null, ByteBuffer.wrap(requestToServerBody.clone()));
-            request.replayPayload(wrap);
+            request.replayPayload(Buffers.wrap(null, cloneByteBuffer(requestToServerBody)));
+            // - clone necessary, because reading parameters below damages the content of "replayed" buffer
             System.out.println("Request parameters:");
             for (String name : request.getParameterNames()) {
                 System.out.printf("    %s: %s%n", name, request.getParameter(name));
@@ -84,7 +84,7 @@ class GrizzlyProxyClientProcessor extends BaseFilter {
             builder.query(request.getQueryString());
             builder.contentType(request.getContentType());
             builder.contentLength(request.getContentLength());
-            builder.chunked(false);
+            builder.chunked(false); //TODO!! - Q: is it correct?
             System.out.println("Request headers:");
             for (String headerName : request.getHeaderNames()) {
                 for (String headerValue : request.getHeaders(headerName)) {
@@ -98,7 +98,7 @@ class GrizzlyProxyClientProcessor extends BaseFilter {
         } finally {
             debugUnlock();
         }
-        debugWriteBytes(requestToServerBody, "request-", counter.getAndIncrement());
+        debugWriteBytes(byteBufferToArray(requestToServerBody), "request-", counter.getAndIncrement());
     }
 
     public void connect() throws InterruptedException, ExecutionException, TimeoutException {
@@ -120,10 +120,11 @@ class GrizzlyProxyClientProcessor extends BaseFilter {
         debugLock();
         try {
             final HttpContent.Builder contentBuilder = HttpContent.builder(requestToServerHeaders);
-            Buffer buffer = Buffers.wrap(null, ByteBuffer.wrap(requestToServerBody));
+            Buffer buffer = Buffers.wrap(null, requestToServerBody);
 //        buffer.rewind();
             contentBuilder.content(buffer);
             contentBuilder.last(true);
+            //TODO!! Q - is it necessary?
             HttpContent content = contentBuilder.build();
             System.out.println("Sending request to server: header " + content.getHttpHeader());
             System.out.println("Sending request to server: buffer " + buffer);
@@ -148,7 +149,7 @@ class GrizzlyProxyClientProcessor extends BaseFilter {
         try {
             System.out.printf("first: %s, isHeader: %s, isLast: %s, counter: %d%n",
                 firstReply, httpContent.isHeader(), httpContent.isLast(), currentCounter);
-            if (firstReply) {
+            if (firstReply) { // TODO!! Q: is it correct?
                 System.out.println("Initial response headers:");
                 for (String headerName : response.getHeaderNames()) {
                     for (String headerValue : response.getHeaderValues(headerName)) {
@@ -220,6 +221,7 @@ class GrizzlyProxyClientProcessor extends BaseFilter {
 //                    Thread.sleep(new java.util.Random().nextInt(1000));
 //                    System.out.printf("Sending %d bytes (counter=%d): done%n", bytesToClient.length, currentCounter);
                     if (httpContent.isLast()) {
+                        //TODO!! Q: is it correct?
                         outputStream.close();
                         connection.close();
                         if (response.isSuspended()) {
@@ -268,9 +270,17 @@ class GrizzlyProxyClientProcessor extends BaseFilter {
     }
 
     private static byte[] byteBufferToArray(ByteBuffer byteBuffer) {
+        byteBuffer = byteBuffer.duplicate();
         final byte[] bytes = new byte[byteBuffer.remaining()];
         byteBuffer.get(bytes);
         return bytes;
+    }
+
+    private static ByteBuffer cloneByteBuffer(ByteBuffer byteBuffer) {
+        byteBuffer = byteBuffer.duplicate();
+        ByteBuffer result = ByteBuffer.allocate(byteBuffer.remaining());
+        result.duplicate().put(byteBuffer);
+        return result;
     }
 
     private static byte[] inputStreamToArray(InputStream inputStream) throws IOException {
