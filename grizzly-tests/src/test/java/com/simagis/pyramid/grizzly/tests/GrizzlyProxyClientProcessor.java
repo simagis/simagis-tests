@@ -1,8 +1,6 @@
 package com.simagis.pyramid.grizzly.tests;
 
-import org.glassfish.grizzly.Buffer;
-import org.glassfish.grizzly.Connection;
-import org.glassfish.grizzly.WriteHandler;
+import org.glassfish.grizzly.*;
 import org.glassfish.grizzly.filterchain.BaseFilter;
 import org.glassfish.grizzly.filterchain.FilterChainContext;
 import org.glassfish.grizzly.filterchain.NextAction;
@@ -11,27 +9,28 @@ import org.glassfish.grizzly.http.HttpRequestPacket;
 import org.glassfish.grizzly.http.HttpResponsePacket;
 import org.glassfish.grizzly.http.Protocol;
 import org.glassfish.grizzly.http.io.InputBuffer;
+import org.glassfish.grizzly.http.io.NIOInputStream;
 import org.glassfish.grizzly.http.io.NIOOutputStream;
 import org.glassfish.grizzly.http.server.Request;
 import org.glassfish.grizzly.http.server.Response;
 import org.glassfish.grizzly.http.util.MimeHeaders;
 import org.glassfish.grizzly.memory.Buffers;
+import org.glassfish.grizzly.nio.transport.TCPNIOConnectorHandler;
 import org.glassfish.grizzly.nio.transport.TCPNIOTransport;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
+import java.util.Objects;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.logging.Level;
 
 class GrizzlyProxyClientProcessor extends BaseFilter {
     private static final String PATH_FOR_DEBUG = "/tmp/gpcp/";
@@ -40,20 +39,20 @@ class GrizzlyProxyClientProcessor extends BaseFilter {
     private static final boolean LOCAL_SYNCHRONIZATION = true;
     private static final Lock GLOBAL_LOCK = new ReentrantLock();
 
-    private final TCPNIOTransport clientTransport;
     private final Response response;
     private final HttpRequestPacket requestToServerHeaders;
     private final ByteBuffer requestToServerBody;
     private final String serverHost;
     private final int serverPort;
+    private final NIOInputStream inputStream;
     private final NIOOutputStream outputStream;
-    volatile Connection connection = null;
+    private TCPNIOConnectorHandler connectorHandler = null;
+    private volatile Connection connection = null;
     private boolean firstReply = true;
 
     private final Lock lock = new ReentrantLock();
 
     GrizzlyProxyClientProcessor(
-        TCPNIOTransport clientTransport,
         Request request,
         Response response,
         String serverHost,
@@ -61,14 +60,17 @@ class GrizzlyProxyClientProcessor extends BaseFilter {
     {
         debugLock();
         try {
-            this.clientTransport = clientTransport;
             this.response = response;
             this.serverHost = serverHost;
             this.serverPort = serverPort;
+            this.inputStream = request.getNIOInputStream();
             this.outputStream = response.getNIOOutputStream();
 
             InputBuffer inputBuffer = request.getInputBuffer();
+            //TODO!! it is not FULL buffer - not
             this.requestToServerBody = inputBuffer.readBuffer().toByteBuffer();
+            //TODO!! getNIOInputStream() and wait until the last
+            //TODO!! bad idea to accumulate all POST request
 
             request.replayPayload(Buffers.wrap(null, cloneByteBuffer(requestToServerBody)));
             // - clone necessary, because reading parameters below damages the content of "replayed" buffer
@@ -91,7 +93,6 @@ class GrizzlyProxyClientProcessor extends BaseFilter {
                     builder.header(headerName, headerValue);
                 }
             }
-//            builder.removeHeader("accept-encoding"); //TODO!! - why necessary?
             builder.removeHeader("Host");
             builder.header("Host", serverHost + ":" + serverPort);
             this.requestToServerHeaders = builder.build();
@@ -101,15 +102,64 @@ class GrizzlyProxyClientProcessor extends BaseFilter {
         debugWriteBytes(byteBufferToArray(requestToServerBody), "request-", counter.getAndIncrement());
     }
 
-    public void connect() throws InterruptedException, ExecutionException, TimeoutException {
-//        debugLock();
-        try {
-            Future<Connection> connectFuture = clientTransport.connect(serverHost, serverPort);
-            this.connection = connectFuture.get(10, TimeUnit.SECONDS);
-            connection.setReadTimeout(2, TimeUnit.SECONDS);
-            System.out.printf("Connected%n");
-        } finally {
-//            debugUnlock();
+    public void setConnectorHandler(TCPNIOConnectorHandler connectorHandler) {
+        this.connectorHandler = Objects.requireNonNull(connectorHandler);
+    }
+
+    public void requestConnectionToServer() throws InterruptedException {
+        System.out.println("Requesting connection to " + serverHost + ":" + serverPort + "...");
+        final CompletionHandler<Connection> completionHandler = new CompletionHandler<Connection>() {
+            @Override
+            public void cancelled() {
+            }
+
+            @Override
+            public void failed(Throwable throwable) {
+                synchronized (lock) {
+                    System.err.println("Connection failed");
+                    throwable.printStackTrace();
+                    //TODO!! logging
+                    response.setStatus(500, "Cannot connect to the server");
+                    close();
+                    if (response.isSuspended()) {
+                        response.resume();
+                        System.out.println("Response is resumed");
+                    } else {
+                        response.finish();
+                        System.out.println("Response is finished");
+                    }
+                }
+            }
+
+            @Override
+            public void completed(Connection connection) {
+                synchronized (lock) {
+                    GrizzlyProxyClientProcessor.this.connection = connection;
+                }
+                System.out.println("Connected");
+            }
+
+            @Override
+            public void updated(Connection connection) {
+                //ignore
+            }
+        };
+        connectorHandler.connect(
+            new InetSocketAddress(serverHost, serverPort), completionHandler);
+    }
+
+    public void close() {
+        synchronized (lock) {
+            //TODO!! synchronize also access to connection/outputStream
+            if (connection != null) {
+                connection.close();
+                connection = null;
+            }
+            try {
+                outputStream.close();
+            } catch (IOException e) {
+                //TODO!! like in ReadTask
+            }
         }
     }
 
@@ -149,7 +199,8 @@ class GrizzlyProxyClientProcessor extends BaseFilter {
         try {
             System.out.printf("first: %s, isHeader: %s, isLast: %s, counter: %d%n",
                 firstReply, httpContent.isHeader(), httpContent.isLast(), currentCounter);
-            if (firstReply) { // TODO!! Q: is it correct?
+            if (firstReply) {
+                // It is correct!
                 System.out.println("Initial response headers:");
                 for (String headerName : response.getHeaderNames()) {
                     for (String headerValue : response.getHeaderValues(headerName)) {
@@ -222,8 +273,7 @@ class GrizzlyProxyClientProcessor extends BaseFilter {
 //                    System.out.printf("Sending %d bytes (counter=%d): done%n", bytesToClient.length, currentCounter);
                     if (httpContent.isLast()) {
                         //TODO!! Q: is it correct?
-                        outputStream.close();
-                        connection.close();
+                        close();
                         if (response.isSuspended()) {
                             response.resume();
                             System.out.println("Response is resumed: " + currentCounter);

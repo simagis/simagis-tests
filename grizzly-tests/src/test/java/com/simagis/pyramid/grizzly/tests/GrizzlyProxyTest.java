@@ -1,19 +1,19 @@
 package com.simagis.pyramid.grizzly.tests;
 
+import org.glassfish.grizzly.filterchain.FilterChain;
 import org.glassfish.grizzly.filterchain.FilterChainBuilder;
 import org.glassfish.grizzly.filterchain.TransportFilter;
 import org.glassfish.grizzly.http.ContentEncoding;
 import org.glassfish.grizzly.http.HttpClientFilter;
 import org.glassfish.grizzly.http.HttpRequestPacket;
 import org.glassfish.grizzly.http.server.*;
+import org.glassfish.grizzly.nio.transport.TCPNIOConnectorHandler;
 import org.glassfish.grizzly.nio.transport.TCPNIOTransport;
 import org.glassfish.grizzly.nio.transport.TCPNIOTransportBuilder;
 import org.glassfish.grizzly.threadpool.ThreadPoolConfig;
 
 import java.io.IOException;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 
 public class GrizzlyProxyTest {
     final String serverHost;
@@ -96,32 +96,28 @@ public class GrizzlyProxyTest {
                     }*/
 
                     final GrizzlyProxyClientProcessor clientProcessor = new GrizzlyProxyClientProcessor(
-                        clientTransport, request, response, serverHost, serverPort);
+                        request, response, serverHost, serverPort);
                     final FilterChainBuilder clientFilterChainBuilder = FilterChainBuilder.stateless();
                     clientFilterChainBuilder.add(new TransportFilter());
                     clientFilterChainBuilder.add(httpClientFilter);
                     clientFilterChainBuilder.add(clientProcessor);
-                    clientTransport.setProcessor(clientFilterChainBuilder.build());
-
-                    try {
-                        clientProcessor.connect();
-                        response.suspend(30, TimeUnit.SECONDS, null, new TimeoutHandler() {
-                            @Override
-                            public boolean onTimeout(Response response) {
-                                //TODO!! Q: what is the sense of timeout value?
-                                System.out.println("TIMEOUT");
-                                response.finish();
-                                clientProcessor.connection.close();
-                                return true;
-                            }
-                        });
-                        System.out.printf("Requesting %s:%d...%n", serverHost, serverPort);
-                    } catch (TimeoutException e) {
-                        System.err.println("Timeout while reading target resource");
-                    } catch (ExecutionException e) {
-                        System.err.println("Error downloading the resource");
-                        e.getCause().printStackTrace();
-                    }
+                    final FilterChain filterChain = clientFilterChainBuilder.build();
+                    final TCPNIOConnectorHandler connectorHandler =
+                        TCPNIOConnectorHandler.builder(clientTransport)
+                            .setSyncConnectTimeout(2, TimeUnit.SECONDS)
+                            .processor(filterChain).build();
+                    clientProcessor.setConnectorHandler(connectorHandler);
+                    response.suspend(30, TimeUnit.SECONDS, null, new TimeoutHandler() {
+                        @Override
+                        public boolean onTimeout(Response response) {
+                            //TODO!! Q: what is the sense of timeout value?
+                            System.out.println("TIMEOUT");
+                            response.finish();
+                            clientProcessor.close();
+                            return true;
+                        }
+                    });
+                    clientProcessor.requestConnectionToServer();
                 }
             });
     }

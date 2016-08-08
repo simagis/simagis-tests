@@ -5,12 +5,18 @@ import io.vertx.core.Vertx;
 import io.vertx.core.buffer.Buffer;
 import io.vertx.core.http.*;
 
+import java.io.IOException;
+
 public class VertxProxyTest {
-    final static int PROXY_PORT = 82;
-    final static int SERVER_PORT = 8080;
-    final static String SERVER_HOST = "localhost";
 
     public static void main(String[] args) {
+            if (args.length < 3) {
+                System.out.println("Usage: " + VertxProxyTest.class.getName() + " server-host server-port proxy-port");
+                return;
+            }
+        final String serverHost = args[0];
+        final int serverPort = Integer.parseInt(args[1]);
+        final int proxyPort = Integer.parseInt(args[2]);
         Vertx vertx = Vertx.vertx();
         HttpClient client = vertx.createHttpClient(new HttpClientOptions());
         final HttpServer server = vertx.createHttpServer();
@@ -19,7 +25,7 @@ public class VertxProxyTest {
             public void handle(HttpServerRequest request) {
                 System.out.println("Proxying request: " + request.uri());
                 HttpClientRequest clientRequest = client.request(
-                    request.method(), SERVER_PORT, SERVER_HOST, request.uri(), new Handler<HttpClientResponse>() {
+                    request.method(), serverPort, serverHost, request.uri(), new Handler<HttpClientResponse>() {
                         @Override
                         public void handle(HttpClientResponse clientResponse) {
                             System.out.println("Proxying response: " + clientResponse.statusCode());
@@ -67,6 +73,6 @@ public class VertxProxyTest {
                 System.out.println("Clientrequests customized: <<<" + clientRequest.headers()
                     + ">>> ");
             }
-        }).listen(PROXY_PORT);
+        }).listen(proxyPort);
     }
 }
