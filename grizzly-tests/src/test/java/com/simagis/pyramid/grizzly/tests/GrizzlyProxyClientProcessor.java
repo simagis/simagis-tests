@@ -155,53 +155,59 @@ class GrizzlyProxyClientProcessor extends BaseFilter {
     public NextAction handleConnect(FilterChainContext ctx) throws IOException {
         System.out.println("Connected to " + serverHost + ":" + serverPort);
 
-        debugLock();
-        try {
-            inputStream.notifyAvailable(new ReadHandler() {
-                @Override
-                public void onDataAvailable() throws Exception {
+        inputStream.notifyAvailable(new ReadHandler() {
+            @Override
+            public void onDataAvailable() throws Exception {
+                debugLock();
+                try {
                     sendData();
-                    inputStream.notifyAvailable(this);
+                } finally {
+                    debugUnlock();
                 }
+                inputStream.notifyAvailable(this);
+            }
 
-                @Override
-                public void onError(Throwable throwable) {
-                    System.out.println("Error while reading request");
-                    throwable.printStackTrace();
-                    closeAndReturnError("Error while reading request");
-                }
+            @Override
+            public void onError(Throwable throwable) {
+                System.out.println("Error while reading request");
+                throwable.printStackTrace();
+                closeAndReturnError("Error while reading request");
+            }
 
-                @Override
-                public void onAllDataRead() throws Exception {
+            @Override
+            public void onAllDataRead() throws Exception {
+                debugLock();
+                try {
                     System.out.println("All data ready");
                     sendData();
                     try {
                         inputStream.close();
                     } catch (IOException ignored) {
                     }
+                } finally {
+                    debugUnlock();
                 }
+            }
 
-                private void sendData() {
-                    final boolean finished = inputStream.isFinished();
-                    final Buffer buffer = inputStream.readBuffer();
-                    System.out.printf("Data ready, %d bytes%s; sending request to server: buffer %s%n",
-                        inputStream.readyData(), finished ? " (FINISHED)" : "", buffer);
-                    final HttpContent httpContent = HttpContent.builder(requestToServerHeaders)
-                        .content(buffer)
-                        .last(finished)
-                        .build();
-                    //TODO!! Q - when last is necessary?
-                    debugWriteBytes(byteBufferToArray(buffer.toByteBuffer()), "request-", counter.getAndIncrement());
-                    ctx.write(httpContent);
-                    // - note: buffer will be destroyed by this call
-                }
-            });
-            System.out.println("Starting sending request to server: header " + requestToServerHeaders);
+            private void sendData() {
+                final boolean finished = inputStream.isFinished();
+                final int readyData = inputStream.readyData();
+                final Buffer buffer = inputStream.readBuffer();
+                System.out.printf("Data ready, %d bytes%s; sending request to server: buffer %s%n",
+                    readyData, finished ? " (FINISHED)" : "", buffer);
+                final HttpContent httpContent = HttpContent.builder(requestToServerHeaders)
+                    .content(buffer)
+                    .last(finished)
+                    .build();
+                //TODO!! Q - when last is necessary?
+                debugWriteBytes(byteBufferToArray(buffer.toByteBuffer()), "request-", counter.getAndIncrement());
+                ctx.write(httpContent);
+                // - note: buffer will be destroyed by this call
+            }
+        });
+        System.out.println("Starting sending request to server: header " + requestToServerHeaders);
 //            ctx.write(requestToServerHeaders);
-            return ctx.getStopAction();
-        } finally {
-            debugUnlock();
-        }
+        return ctx.getStopAction();
     }
 
     @Override
