@@ -86,13 +86,14 @@ class GrizzlyProxyClientProcessor extends BaseFilter {
             builder.query(request.getQueryString());
             builder.contentType(request.getContentType());
             builder.contentLength(request.getContentLength());
-            builder.chunked(false); //TODO!! - Q: is it correct?
+            // builder.chunked(false);
             System.out.println("Request headers:");
             for (String headerName : request.getHeaderNames()) {
                 for (String headerValue : request.getHeaders(headerName)) {
                     builder.header(headerName, headerValue);
                 }
             }
+//            builder.removeHeader("accept-encoding");
             builder.removeHeader("Host");
             builder.header("Host", serverHost + ":" + serverPort);
             this.requestToServerHeaders = builder.build();
@@ -124,7 +125,6 @@ class GrizzlyProxyClientProcessor extends BaseFilter {
 
             @Override
             public void completed(Connection connection) {
-                setConnection(connection);
                 System.out.println("Connected");
             }
 
@@ -153,6 +153,7 @@ class GrizzlyProxyClientProcessor extends BaseFilter {
 
     @Override
     public NextAction handleConnect(FilterChainContext ctx) throws IOException {
+        setConnection(ctx.getConnection());
         System.out.println("Connected to " + serverHost + ":" + serverPort);
 
         inputStream.notifyAvailable(new ReadHandler() {
@@ -190,18 +191,17 @@ class GrizzlyProxyClientProcessor extends BaseFilter {
             }
 
             private void sendData() {
-                final boolean finished = inputStream.isFinished();
                 final int readyData = inputStream.readyData();
                 final Buffer buffer = inputStream.readBuffer();
+                final boolean finished = inputStream.isFinished();
                 System.out.printf("Data ready, %d bytes%s; sending request to server: buffer %s%n",
                     readyData, finished ? " (FINISHED)" : "", buffer);
                 final HttpContent httpContent = HttpContent.builder(requestToServerHeaders)
                     .content(buffer)
                     .last(finished)
                     .build();
-                //TODO!! Q - when last is necessary?
                 debugWriteBytes(byteBufferToArray(buffer.toByteBuffer()), "request-", counter.getAndIncrement());
-                ctx.write(httpContent);
+                connection.write(httpContent);
                 // - note: buffer will be destroyed by this call
             }
         });
@@ -296,15 +296,9 @@ class GrizzlyProxyClientProcessor extends BaseFilter {
 //                    Thread.sleep(new java.util.Random().nextInt(1000));
 //                    System.out.printf("Sending %d bytes (counter=%d): done%n", bytesToClient.length, currentCounter);
                     if (httpContent.isLast()) {
-                        //TODO!! Q: is it correct?
                         close();
-                        if (response.isSuspended()) {
-                            response.resume();
-                            System.out.println("Response is resumed: " + currentCounter);
-                        } else {
-                            response.finish();
-                            System.out.println("Response is finished: " + currentCounter);
-                        }
+                        response.resume();
+                        System.out.println("Response is resumed: " + currentCounter);
                     }
                 } finally {
                     debugUnlock();
