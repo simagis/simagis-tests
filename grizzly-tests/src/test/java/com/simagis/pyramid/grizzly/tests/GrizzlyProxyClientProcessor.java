@@ -16,7 +16,6 @@ import org.glassfish.grizzly.http.server.Response;
 import org.glassfish.grizzly.http.util.MimeHeaders;
 import org.glassfish.grizzly.memory.Buffers;
 import org.glassfish.grizzly.nio.transport.TCPNIOConnectorHandler;
-import org.glassfish.grizzly.nio.transport.TCPNIOTransport;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -30,7 +29,6 @@ import java.util.Objects;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
-import java.util.logging.Level;
 
 class GrizzlyProxyClientProcessor extends BaseFilter {
     private static final String PATH_FOR_DEBUG = "/tmp/gpcp/";
@@ -41,7 +39,7 @@ class GrizzlyProxyClientProcessor extends BaseFilter {
 
     private final Response response;
     private final HttpRequestPacket requestToServerHeaders;
-    private final ByteBuffer requestToServerBody;
+    private ByteBuffer requestToServerBody;
     private final String serverHost;
     private final int serverPort;
     private final NIOInputStream inputStream;
@@ -66,6 +64,7 @@ class GrizzlyProxyClientProcessor extends BaseFilter {
             this.inputStream = request.getNIOInputStream();
             this.outputStream = response.getNIOOutputStream();
 
+            /*
             InputBuffer inputBuffer = request.getInputBuffer();
             //TODO!! it is not FULL buffer - not
             this.requestToServerBody = inputBuffer.readBuffer().toByteBuffer();
@@ -78,6 +77,7 @@ class GrizzlyProxyClientProcessor extends BaseFilter {
             for (String name : request.getParameterNames()) {
                 System.out.printf("    %s: %s%n", name, request.getParameter(name));
             }
+            */
 
             final HttpRequestPacket.Builder builder = HttpRequestPacket.builder();
             builder.protocol(Protocol.HTTP_1_1);
@@ -99,7 +99,6 @@ class GrizzlyProxyClientProcessor extends BaseFilter {
         } finally {
             debugUnlock();
         }
-        debugWriteBytes(byteBufferToArray(requestToServerBody), "request-", counter.getAndIncrement());
     }
 
     public void setConnectorHandler(TCPNIOConnectorHandler connectorHandler) {
@@ -119,23 +118,13 @@ class GrizzlyProxyClientProcessor extends BaseFilter {
                     System.err.println("Connection failed");
                     throwable.printStackTrace();
                     //TODO!! logging
-                    response.setStatus(500, "Cannot connect to the server");
-                    close();
-                    if (response.isSuspended()) {
-                        response.resume();
-                        System.out.println("Response is resumed");
-                    } else {
-                        response.finish();
-                        System.out.println("Response is finished");
-                    }
+                    closeAndReturnError("Cannot connect to the server");
                 }
             }
 
             @Override
             public void completed(Connection connection) {
-                synchronized (lock) {
-                    GrizzlyProxyClientProcessor.this.connection = connection;
-                }
+                setConnection(connection);
                 System.out.println("Connected");
             }
 
@@ -150,7 +139,6 @@ class GrizzlyProxyClientProcessor extends BaseFilter {
 
     public void close() {
         synchronized (lock) {
-            //TODO!! synchronize also access to connection/outputStream
             if (connection != null) {
                 connection.close();
                 connection = null;
@@ -169,17 +157,47 @@ class GrizzlyProxyClientProcessor extends BaseFilter {
 
         debugLock();
         try {
-            final HttpContent.Builder contentBuilder = HttpContent.builder(requestToServerHeaders);
-            Buffer buffer = Buffers.wrap(null, requestToServerBody);
-//        buffer.rewind();
-            contentBuilder.content(buffer);
-            contentBuilder.last(true);
-            //TODO!! Q - is it necessary?
-            HttpContent content = contentBuilder.build();
-            System.out.println("Sending request to server: header " + content.getHttpHeader());
-            System.out.println("Sending request to server: buffer " + buffer);
+            inputStream.notifyAvailable(new ReadHandler() {
+                @Override
+                public void onDataAvailable() throws Exception {
+                    sendData();
+                    inputStream.notifyAvailable(this);
+                }
 
-            ctx.write(content);
+                @Override
+                public void onError(Throwable throwable) {
+                    System.out.println("Error while reading request");
+                    throwable.printStackTrace();
+                    closeAndReturnError("Error while reading request");
+                }
+
+                @Override
+                public void onAllDataRead() throws Exception {
+                    System.out.println("All data ready");
+                    sendData();
+                    try {
+                        inputStream.close();
+                    } catch (IOException ignored) {
+                    }
+                }
+
+                private void sendData() {
+                    final boolean finished = inputStream.isFinished();
+                    final Buffer buffer = inputStream.readBuffer();
+                    System.out.printf("Data ready, %d bytes%s; sending request to server: buffer %s%n",
+                        inputStream.readyData(), finished ? " (FINISHED)" : "", buffer);
+                    final HttpContent httpContent = HttpContent.builder(requestToServerHeaders)
+                        .content(buffer)
+                        .last(finished)
+                        .build();
+                    //TODO!! Q - when last is necessary?
+                    debugWriteBytes(byteBufferToArray(buffer.toByteBuffer()), "request-", counter.getAndIncrement());
+                    ctx.write(httpContent);
+                    // - note: buffer will be destroyed by this call
+                }
+            });
+            System.out.println("Starting sending request to server: header " + requestToServerHeaders);
+//            ctx.write(requestToServerHeaders);
             return ctx.getStopAction();
         } finally {
             debugUnlock();
@@ -302,6 +320,25 @@ class GrizzlyProxyClientProcessor extends BaseFilter {
         super.exceptionOccurred(ctx, error);
         error.printStackTrace();
     }
+
+    private void setConnection(Connection connection) {
+        synchronized (lock) {
+            this.connection = connection;
+        }
+    }
+
+    private void closeAndReturnError(String message) {
+        response.setStatus(500, message);
+        close();
+        if (response.isSuspended()) {
+            response.resume();
+            System.out.println("Response is resumed");
+        } else {
+            response.finish();
+            System.out.println("Response is finished");
+        }
+    }
+
 
     private void debugLock() {
         if (GLOBAL_SYNCHRONIZATION) {
