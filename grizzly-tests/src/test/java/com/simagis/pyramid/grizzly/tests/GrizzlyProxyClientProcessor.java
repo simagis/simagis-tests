@@ -8,13 +8,11 @@ import org.glassfish.grizzly.http.HttpContent;
 import org.glassfish.grizzly.http.HttpRequestPacket;
 import org.glassfish.grizzly.http.HttpResponsePacket;
 import org.glassfish.grizzly.http.Protocol;
-import org.glassfish.grizzly.http.io.InputBuffer;
 import org.glassfish.grizzly.http.io.NIOInputStream;
 import org.glassfish.grizzly.http.io.NIOOutputStream;
 import org.glassfish.grizzly.http.server.Request;
 import org.glassfish.grizzly.http.server.Response;
 import org.glassfish.grizzly.http.util.MimeHeaders;
-import org.glassfish.grizzly.memory.Buffers;
 import org.glassfish.grizzly.nio.transport.TCPNIOConnectorHandler;
 
 import java.io.ByteArrayOutputStream;
@@ -39,7 +37,6 @@ class GrizzlyProxyClientProcessor extends BaseFilter {
 
     private final Response response;
     private final HttpRequestPacket requestToServerHeaders;
-    private ByteBuffer requestToServerBody;
     private final String serverHost;
     private final int serverPort;
     private final NIOInputStream inputStream;
@@ -84,9 +81,9 @@ class GrizzlyProxyClientProcessor extends BaseFilter {
             builder.method(request.getMethod());
             builder.uri(request.getRequestURI());
             builder.query(request.getQueryString());
+            // builder.chunked(false);
             builder.contentType(request.getContentType());
             builder.contentLength(request.getContentLength());
-            // builder.chunked(false);
             System.out.println("Request headers:");
             for (String headerName : request.getHeaderNames()) {
                 for (String headerValue : request.getHeaders(headerName)) {
@@ -108,33 +105,31 @@ class GrizzlyProxyClientProcessor extends BaseFilter {
 
     public void requestConnectionToServer() throws InterruptedException {
         System.out.println("Requesting connection to " + serverHost + ":" + serverPort + "...");
-        final CompletionHandler<Connection> completionHandler = new CompletionHandler<Connection>() {
-            @Override
-            public void cancelled() {
-            }
-
-            @Override
-            public void failed(Throwable throwable) {
-                synchronized (lock) {
-                    System.err.println("Connection failed");
-                    throwable.printStackTrace();
-                    //TODO!! logging
-                    closeAndReturnError("Cannot connect to the server");
-                }
-            }
-
-            @Override
-            public void completed(Connection connection) {
-                System.out.println("Connected");
-            }
-
-            @Override
-            public void updated(Connection connection) {
-                //ignore
-            }
-        };
         connectorHandler.connect(
-            new InetSocketAddress(serverHost, serverPort), completionHandler);
+            new InetSocketAddress(serverHost, serverPort), new CompletionHandler<Connection>() {
+                @Override
+                public void cancelled() {
+                }
+
+                @Override
+                public void failed(Throwable throwable) {
+                    synchronized (lock) {
+                        System.err.println("Connection failed");
+                        throwable.printStackTrace();
+                        //TODO!! logging
+                        closeAndReturnError("Cannot connect to the server");
+                    }
+                }
+
+                @Override
+                public void completed(Connection connection) {
+                    System.out.println("Connected");
+                }
+
+                @Override
+                public void updated(Connection connection) {
+                }
+            });
     }
 
     public void close() {
@@ -338,7 +333,6 @@ class GrizzlyProxyClientProcessor extends BaseFilter {
             System.out.println("Response is finished");
         }
     }
-
 
     private void debugLock() {
         if (GLOBAL_SYNCHRONIZATION) {

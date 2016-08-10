@@ -132,7 +132,7 @@ public class GrizzlyProxyTest {
             return;
         }
         new GrizzlyProxyTest(args[0], Integer.parseInt(args[1]), Integer.parseInt(args[2])).start();
-        System.out.println("Press ENTER to stop the server...");
+        System.out.println("Press ENTER to stop the proxy server...");
         System.in.read();
     }
 }
