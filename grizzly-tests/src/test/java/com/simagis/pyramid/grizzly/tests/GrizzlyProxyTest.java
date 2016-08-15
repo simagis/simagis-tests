@@ -110,8 +110,8 @@ public class GrizzlyProxyTest {
                     response.suspend(30, TimeUnit.SECONDS, null, new TimeoutHandler() {
                         @Override
                         public boolean onTimeout(Response response) {
-                            //TODO!! Q: what is the sense of timeout value?
-                            System.out.println("TIMEOUT");
+                            //It is timeout from the very beginning of the request: must be large for large responses
+                            System.out.println("TIMEOUT while reading " +  request.getRequestURL());
                             response.finish();
                             clientProcessor.close();
                             return true;

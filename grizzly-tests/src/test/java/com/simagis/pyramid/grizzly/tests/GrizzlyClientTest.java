@@ -73,6 +73,8 @@ public class GrizzlyClientTest {
             @Override
             public NextAction handleRead(FilterChainContext ctx) throws IOException {
                 final HttpContent httpContent = ctx.getMessage();
+                System.out.printf(", isHeader: %s, isLast: %s%n",
+                    httpContent.isHeader(), httpContent.isLast());
                 final ByteBuffer byteBuffer = httpContent.getContent().toByteBuffer();
 //                System.out.printf("ByteBuffer limit %d, position %d, remaining %d%n",
 //                    byteBuffer.limit(), byteBuffer.position(), byteBuffer.remaining());
@@ -113,7 +115,7 @@ public class GrizzlyClientTest {
             System.out.printf("Initializing request: %.4f ms creating filter chain + "
                     + "%.4f ms creating transport + %.4f ms starting transport%n",
                 (t2 - t1) * 1e-6, (t3 - t2) * 1e-6, (t4 - t3) * 1e-6);
-            for (int k = 0; k < 3; k++) {
+            for (int k = 0; k < 1; k++) {
                 t1 = System.nanoTime();
                 Connection connection = null;
                 System.out.printf("Requesting %s...%n", uri);
@@ -134,7 +136,7 @@ public class GrizzlyClientTest {
                     Files.write(resultFile, result);
                     System.out.printf("%d bytes saved in %s%n", result.length, resultFile);
                 } catch (TimeoutException e) {
-                    System.err.println("Timeout while reading target resource");
+                    System.err.println("Timeout while reading target resource!!!");
                 } catch (ExecutionException e) {
                     System.err.println("Error downloading the resource: " + host + ":" + port);
                     e.getCause().printStackTrace();
