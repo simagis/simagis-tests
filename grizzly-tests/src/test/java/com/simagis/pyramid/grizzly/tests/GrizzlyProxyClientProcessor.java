@@ -383,6 +383,5 @@ class GrizzlyProxyClientProcessor extends BaseFilter {
         } catch (IOException e) {
             e.printStackTrace();
         }
-
     }
 }

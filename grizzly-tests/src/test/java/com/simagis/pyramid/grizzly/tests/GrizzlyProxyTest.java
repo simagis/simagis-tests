@@ -6,6 +6,7 @@ import org.glassfish.grizzly.filterchain.TransportFilter;
 import org.glassfish.grizzly.http.ContentEncoding;
 import org.glassfish.grizzly.http.HttpClientFilter;
 import org.glassfish.grizzly.http.HttpRequestPacket;
+import org.glassfish.grizzly.http.Method;
 import org.glassfish.grizzly.http.server.*;
 import org.glassfish.grizzly.nio.transport.TCPNIOConnectorHandler;
 import org.glassfish.grizzly.nio.transport.TCPNIOTransport;
@@ -13,6 +14,10 @@ import org.glassfish.grizzly.nio.transport.TCPNIOTransportBuilder;
 import org.glassfish.grizzly.threadpool.ThreadPoolConfig;
 
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 public class GrizzlyProxyTest {
@@ -60,6 +65,8 @@ public class GrizzlyProxyTest {
 //                    for (String name : request.getParameterNames()) {
 //                        System.out.printf("    %s: %s%n", name, request.getParameter(name));
 //                    }
+                    final Map<String, List<String>> queryParameters = parseQueryOnly(request);
+                    System.out.println("  query parameters: " + queryParameters);
                     System.out.println("  headers:");
                     for (String headerName : request.getHeaderNames()) {
                         for (String headerValue : request.getHeaders(headerName)) {
@@ -124,6 +131,27 @@ public class GrizzlyProxyTest {
 
     void start() throws IOException {
         proxyServer.start();
+    }
+
+    private static Map<String, List<String>> parseQueryOnly(Request request) {
+        final Map<String, List<String>> result = new LinkedHashMap<>();
+        final String previousMethod = request.getMethod().getMethodString();
+        request.setMethod(Method.GET.getMethodString());
+        try {
+            for (final String name : request.getParameterNames()) {
+                final String[] values = request.getParameterValues(name);
+                final List<String> valuesList = new ArrayList<>();
+                if (values != null) {
+                    for (String value : values) {
+                        valuesList.add(value);
+                    }
+                }
+                result.put(name, valuesList);
+            }
+        } finally {
+            request.setMethod(previousMethod);
+        }
+        return result;
     }
 
     public static void main(String[] args) throws IOException {
