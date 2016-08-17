@@ -225,9 +225,9 @@ class GrizzlyProxyClientProcessor extends BaseFilter {
         connectionClosed = true;
         if (lastDataReceived) {
             // Normal finishing due to isLast
-            System.out.println("Connection closed");
+            System.out.println("Connection closed, message = " + ctx.getMessage());
         } else {
-            System.err.println("UNEXPECTED CONNECTION CLOSE");
+            System.err.println("UNEXPECTED CONNECTION CLOSE, message = " + ctx.getMessage());
             processData(ctx.getMessage());
             // - Maybe need to process some last data
         }
