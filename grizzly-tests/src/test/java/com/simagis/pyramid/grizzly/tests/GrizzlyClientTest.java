@@ -73,7 +73,36 @@ public class GrizzlyClientTest {
             @Override
             public NextAction handleRead(FilterChainContext ctx) throws IOException {
                 final HttpContent httpContent = ctx.getMessage();
-                System.out.printf(", isHeader: %s, isLast: %s%n",
+                processData(httpContent);
+                if (httpContent.isLast()) {
+                    serverFuture.result(serverBytes.toByteArray());
+                }
+                return ctx.getStopAction();
+            }
+
+            @Override
+            public NextAction handleClose(FilterChainContext ctx) throws IOException {
+                System.out.println("Connection closed!");
+                final HttpContent httpContent = ctx.getMessage();
+                processData(httpContent);
+                if (!serverFuture.isDone()) {
+                    serverFuture.result(serverBytes.toByteArray());
+                }
+                return ctx.getStopAction();
+            }
+
+            @Override
+            public void exceptionOccurred(FilterChainContext ctx, Throwable error) {
+                super.exceptionOccurred(ctx, error);
+                error.printStackTrace();
+            }
+
+            private void processData(HttpContent httpContent) throws IOException {
+                if (httpContent == null) {
+                    System.out.println("Null content!");
+                    return;
+                }
+                System.out.printf("isHeader: %s, isLast: %s%n",
                     httpContent.isHeader(), httpContent.isLast());
                 final ByteBuffer byteBuffer = httpContent.getContent().toByteBuffer();
 //                System.out.printf("ByteBuffer limit %d, position %d, remaining %d%n",
@@ -88,17 +117,8 @@ public class GrizzlyClientTest {
 //                byteBuffer.rewind();
                 byteBuffer.get(bytes);
                 serverBytes.write(bytes);
-                if (httpContent.isLast()) {
-                    serverFuture.result(serverBytes.toByteArray());
-                }
-                return ctx.getStopAction();
             }
 
-            @Override
-            public void exceptionOccurred(FilterChainContext ctx, Throwable error) {
-                super.exceptionOccurred(ctx, error);
-                error.printStackTrace();
-            }
         });
         long t2 = System.nanoTime(), t3 = t2;
         if (START_TRANSPORT_EVERY_TIME) {
