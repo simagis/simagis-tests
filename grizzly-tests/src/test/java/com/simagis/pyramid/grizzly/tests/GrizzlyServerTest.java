@@ -3,6 +3,7 @@ package com.simagis.pyramid.grizzly.tests;
 import org.glassfish.grizzly.WriteHandler;
 import org.glassfish.grizzly.http.io.NIOOutputStream;
 import org.glassfish.grizzly.http.server.*;
+import org.glassfish.grizzly.http.util.URLDecoder;
 
 import java.io.IOException;
 import java.text.SimpleDateFormat;
@@ -22,14 +23,21 @@ public class GrizzlyServerTest {
                 public void service(Request request, final Response response) throws Exception {
                     final SimpleDateFormat format = new SimpleDateFormat("EEE, dd MMM yyyy HH:mm:ss zzz", Locale.US);
                     System.out.println("Processing " + request.getRequestURI() + " - " + request.getRequestURL());
-                    System.out.println("method: " + request.getMethod());
-                    System.out.println("port: " + request.getServerPort());
-                    System.out.println("remote port: " + request.getRemotePort());
-                    System.out.println("path info: " + request.getPathInfo());
-                    System.out.println("context: " + request.getContextPath());
-                    System.out.println("query: " + request.getQueryString());
+                    System.out.println("  method: " + request.getMethod());
+                    System.out.println("  port: " + request.getServerPort());
+                    System.out.println("  remote port: " + request.getRemotePort());
+                    System.out.println("  path info: " + request.getPathInfo());
+                    System.out.println("  context: " + request.getContextPath());
+                    System.out.println("  encoding: " + request.getCharacterEncoding());
+                    System.out.println("  query: " + request.getQueryString());
                     for (String name : request.getParameterNames()) {
                         System.out.printf("%s: %s%n", name, request.getParameter(name));
+                    }
+                    System.out.println("  headers:");
+                    for (String headerName : request.getHeaderNames()) {
+                        for (String headerValue : request.getHeaders(headerName)) {
+                            System.out.printf("    %s=%s%n", headerName, headerValue);
+                        }
                     }
                     System.out.println("input buffer: " + request.getInputBuffer().getBuffer());
                     final String result = format.format(new Date(System.currentTimeMillis()))

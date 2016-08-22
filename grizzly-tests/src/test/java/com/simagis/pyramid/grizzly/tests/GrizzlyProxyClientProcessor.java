@@ -141,7 +141,7 @@ class GrizzlyProxyClientProcessor extends BaseFilter {
         debugLock();
         try {
             if (connection != null) {
-                connection.close();
+                connection.closeSilently();
                 connection = null;
             }
             try {
@@ -215,69 +215,46 @@ class GrizzlyProxyClientProcessor extends BaseFilter {
 
     @Override
     public NextAction handleRead(FilterChainContext ctx) throws IOException {
-        final HttpContent httpContent = ctx.getMessage();
-        processData(httpContent);
-        return ctx.getStopAction();
-    }
-
-    @Override
-    public NextAction handleClose(FilterChainContext ctx) throws IOException {
-        connectionClosed = true;
-        if (lastDataReceived) {
-            // Normal finishing due to isLast
-            System.out.println("Connection closed, message = " + ctx.getMessage());
-        } else {
-            System.err.println("UNEXPECTED CONNECTION CLOSE, message = " + ctx.getMessage());
-            processData(ctx.getMessage());
-            // - Maybe need to process some last data
+        if (connectionClosed) {
+            // - to be on the safe side (should not occur)
+            return ctx.getStopAction();
         }
-        return ctx.getStopAction();
-    }
-
-    @Override
-    public void exceptionOccurred(FilterChainContext ctx, Throwable error) {
-        super.exceptionOccurred(ctx, error);
-        error.printStackTrace();
-    }
-
-    private void processData(HttpContent httpContent) {
         final long currentCounter = counter.getAndIncrement();
+        final HttpContent httpContent = ctx.getMessage();
+        if (httpContent == null) {
+            throw new AssertionError("Null ctx.getMessage()");
+        }
+        final Buffer buffer = httpContent.getContent();
         debugLock();
         //TODO!! Q - can we reduce synchronization
-        final byte[] bytes;
+        final ByteBuffer byteBuffer = buffer.toByteBuffer();
+        final byte[] bytes = byteBufferToArray(byteBuffer);
+
         final boolean last;
-        if (httpContent == null) {
-            bytes = null;
-            last = true;
-            System.out.println("Null content!");
-        } else {
 //        System.out.printf("ByteBuffer limit %d, position %d, remaining %d%n",
 //            byteBuffer.limit(), byteBuffer.position(), byteBuffer.remaining());
-            try {
-                final Buffer buffer = httpContent.getContent();
-                final ByteBuffer byteBuffer = buffer.toByteBuffer();
-                bytes = byteBufferToArray(byteBuffer);
-                lastDataReceived |= httpContent.isLast();
-                last = lastDataReceived || connectionClosed;
-                System.out.printf("first: %s, isHeader: %s, isLast: %s, counter: %d%n",
-                    firstReply, httpContent.isHeader(), httpContent.isLast(), currentCounter);
-                if (firstReply) {
-                    // It is correct!
-                    System.out.println("Initial response headers:");
-                    for (String headerName : response.getHeaderNames()) {
-                        for (String headerValue : response.getHeaderValues(headerName)) {
-                            System.out.printf("    %s=%s%n", headerName, headerValue);
-                        }
+        try {
+            lastDataReceived |= httpContent.isLast();
+            last = lastDataReceived || connectionClosed;
+            System.out.printf("first: %s, isHeader: %s, isLast: %s, counter: %d%n",
+                firstReply, httpContent.isHeader(), httpContent.isLast(), currentCounter);
+            if (firstReply) {
+                // It is correct!
+                System.out.println("Initial response headers:");
+                for (String headerName : response.getHeaderNames()) {
+                    for (String headerValue : response.getHeaderValues(headerName)) {
+                        System.out.printf("    %s=%s%n", headerName, headerValue);
                     }
-                    final HttpResponsePacket httpHeader = (HttpResponsePacket) httpContent.getHttpHeader();
-                    System.out.println("Server response: " + httpHeader);
-                    response.setStatus(httpHeader.getHttpStatus());
-                    final MimeHeaders headers = httpHeader.getHeaders();
-                    for (String headerName : headers.names()) {
-                        for (String headerValue : headers.values(headerName)) {
-                            response.addHeader(headerName, headerValue);
-                        }
+                }
+                final HttpResponsePacket httpHeader = (HttpResponsePacket) httpContent.getHttpHeader();
+                System.out.println("Server response: " + httpHeader);
+                response.setStatus(httpHeader.getHttpStatus());
+                final MimeHeaders headers = httpHeader.getHeaders();
+                for (String headerName : headers.names()) {
+                    for (String headerValue : headers.values(headerName)) {
+                        response.addHeader(headerName, headerValue);
                     }
+                }
                 /*
                 final boolean encoded = headers.contains(Header.ContentEncoding);
                 for (String headerName : headers.names()) {
@@ -300,28 +277,27 @@ class GrizzlyProxyClientProcessor extends BaseFilter {
                 }
                 */
 
-                    System.out.println("Setting response headers:");
-                    for (String headerName : response.getHeaderNames()) {
-                        for (String headerValue : response.getHeaderValues(headerName)) {
-                            System.out.printf("    %s=%s%n", headerName, headerValue);
-                        }
+                System.out.println("Setting response headers:");
+                for (String headerName : response.getHeaderNames()) {
+                    for (String headerValue : response.getHeaderValues(headerName)) {
+                        System.out.printf("    %s=%s%n", headerName, headerValue);
                     }
-                    firstReply = false;
                 }
-                System.out.printf("ByteBuffer limit %d, position %d, remaining %d%n",
-                    byteBuffer.limit(), byteBuffer.position(), byteBuffer.remaining());
-                System.out.printf("%d: reading %d bytes%s...%n",
-                    currentCounter, bytes.length, httpContent.isLast() ? " (LAST)" : "");
-
-                debugWriteBytes(bytes, "", currentCounter);
-                System.out.printf("%d: notifying about %d bytes%s...%n",
-                    currentCounter, bytes.length, httpContent.isLast() ? " (LAST)" : "");
-                // It seems that events in notifyCanWrite are internally synchronized,
-                // and all calls of onWritePossible will be in proper order.
-
-            } finally {
-                debugUnlock();
+                firstReply = false;
             }
+            System.out.printf("ByteBuffer limit %d, position %d, remaining %d%n",
+                byteBuffer.limit(), byteBuffer.position(), byteBuffer.remaining());
+            System.out.printf("%d: reading %d bytes%s...%n",
+                currentCounter, bytes.length, httpContent.isLast() ? " (LAST)" : "");
+
+            debugWriteBytes(bytes, "", currentCounter);
+            System.out.printf("%d: notifying about %d bytes%s...%n",
+                currentCounter, bytes.length, httpContent.isLast() ? " (LAST)" : "");
+            // It seems that events in notifyCanWrite are internally synchronized,
+            // and all calls of onWritePossible will be in proper order.
+
+        } finally {
+            debugUnlock();
         }
 
         outputStream.notifyCanWrite(new WriteHandler() {
@@ -332,16 +308,14 @@ class GrizzlyProxyClientProcessor extends BaseFilter {
                 debugLock();
                 try {
                     System.out.printf("Sending %s bytes (counter=%d)...%n",
-                        bytes == null ? null : bytes.length, currentCounter);
-                    if (bytes != null) {
-                        outputStream.write(bytes);
-                    }
-//                    Thread.sleep(new java.util.Random().nextInt(1000));
+                        bytes.length, currentCounter);
+                    outputStream.write(bytes);
+                    //                    Thread.sleep(new java.util.Random().nextInt(1000));
 //                    System.out.printf("Sending %d bytes (counter=%d): done%n", bytesToClient.length, currentCounter);
                     if (last) {
                         close();
                         response.resume();
-                        System.out.println("Response is resumed: " + currentCounter);
+                        System.out.println("Response is resumed: counter=" + currentCounter);
                     }
                 } finally {
                     debugUnlock();
@@ -356,6 +330,32 @@ class GrizzlyProxyClientProcessor extends BaseFilter {
         System.out.printf("%d: finishing notifying about %s bytes%s...%n",
             currentCounter, bytes == null ? null : bytes.length, last ? " (LAST)" : "");
 
+        return ctx.getStopAction();
+    }
+
+    @Override
+    public NextAction handleClose(FilterChainContext ctx) throws IOException {
+        System.out.println((lastDataReceived ? "Connection closed" : "UNEXPECTED CONNECTION CLOSE")
+            + ", message = " + ctx.getMessage());
+        // getMessage will be null
+        debugLock();
+        try {
+            connectionClosed = true;
+            if (!lastDataReceived) {
+                close();
+                response.resume();
+                System.out.println("Response is resumed due to closing connection");
+            }
+        } finally {
+            debugUnlock();
+        }
+        return ctx.getStopAction();
+    }
+
+    @Override
+    public void exceptionOccurred(FilterChainContext ctx, Throwable error) {
+        super.exceptionOccurred(ctx, error);
+        error.printStackTrace();
     }
 
     private void setConnection(Connection connection) {

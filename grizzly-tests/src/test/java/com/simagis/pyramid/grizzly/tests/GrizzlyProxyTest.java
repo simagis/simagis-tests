@@ -6,14 +6,16 @@ import org.glassfish.grizzly.filterchain.TransportFilter;
 import org.glassfish.grizzly.http.ContentEncoding;
 import org.glassfish.grizzly.http.HttpClientFilter;
 import org.glassfish.grizzly.http.HttpRequestPacket;
-import org.glassfish.grizzly.http.Method;
 import org.glassfish.grizzly.http.server.*;
+import org.glassfish.grizzly.http.util.Parameters;
 import org.glassfish.grizzly.nio.transport.TCPNIOConnectorHandler;
 import org.glassfish.grizzly.nio.transport.TCPNIOTransport;
 import org.glassfish.grizzly.nio.transport.TCPNIOTransportBuilder;
 import org.glassfish.grizzly.threadpool.ThreadPoolConfig;
+import org.glassfish.grizzly.utils.Charsets;
 
 import java.io.IOException;
+import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -40,7 +42,7 @@ public class GrizzlyProxyTest {
                 .setCorePoolSize(Runtime.getRuntime().availableProcessors())
                 .setMaxPoolSize(512);
         transportBuilder.setWorkerThreadPoolConfig(threadPoolConfig);
-        System.out.println("Current thread pool config: " + transportBuilder.getWorkerThreadPoolConfig());
+//        System.out.println("Current thread pool config: " + transportBuilder.getWorkerThreadPoolConfig());
         this.clientTransport = transportBuilder.build();
         clientTransport.start();
 
@@ -60,6 +62,7 @@ public class GrizzlyProxyTest {
                     System.out.println("  remote port: " + request.getRemotePort());
                     System.out.println("  path info: " + request.getPathInfo());
                     System.out.println("  context: " + request.getContextPath());
+                    System.out.println("  encoding: " + request.getCharacterEncoding());
                     System.out.println("  query: " + request.getQueryString());
 // Very bad idea to read parameters: breaks the request!
 //                    for (String name : request.getParameterNames()) {
@@ -135,24 +138,41 @@ public class GrizzlyProxyTest {
 
     private static Map<String, List<String>> parseQueryOnly(Request request) {
         final Map<String, List<String>> result = new LinkedHashMap<>();
-        final String previousMethod = request.getMethod().getMethodString();
-        request.setMethod(Method.GET.getMethodString());
-        try {
-            for (final String name : request.getParameterNames()) {
-                final String[] values = request.getParameterValues(name);
-                final List<String> valuesList = new ArrayList<>();
-                if (values != null) {
-                    for (String value : values) {
-                        valuesList.add(value);
-                    }
+        final Parameters parameters = new Parameters();
+        final Charset charset = lookupCharset(request.getCharacterEncoding());
+        parameters.setHeaders(request.getRequest().getHeaders());
+        parameters.setQuery(request.getRequest().getQueryStringDC());
+        parameters.setEncoding(charset);
+        parameters.setQueryStringEncoding(charset);
+        parameters.handleQueryParameters();
+        for (final String name : parameters.getParameterNames()) {
+            final String[] values = parameters.getParameterValues(name);
+            final List<String> valuesList = new ArrayList<>();
+            if (values != null) {
+                for (String value : values) {
+                    valuesList.add(value);
                 }
-                result.put(name, valuesList);
             }
-        } finally {
-            request.setMethod(previousMethod);
+            result.put(name, valuesList);
         }
         return result;
     }
+
+
+    private static Charset lookupCharset(final String enc) {
+        Charset charset = org.glassfish.grizzly.http.util.Constants.DEFAULT_HTTP_CHARSET;
+            // Charsets.lookupCharset("UTF-8"); // TODO!! Q - why not so?
+        if (enc != null) {
+            try {
+                //TODO!! Q Why not so: Charset.forName(enc) ?
+                charset = Charsets.lookupCharset(enc);
+            } catch (Exception e) {
+                // ignore possible exception
+            }
+        }
+        return charset;
+    }
+
 
     public static void main(String[] args) throws IOException {
         if (args.length < 3) {

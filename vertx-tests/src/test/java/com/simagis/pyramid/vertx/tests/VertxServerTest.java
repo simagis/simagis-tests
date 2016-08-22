@@ -21,6 +21,7 @@ public class VertxServerTest {
 
             // This handler will be called for every request
             final HttpServerRequest request = routingContext.request();
+            System.out.println("Parameters: " + request.params());
             HttpServerResponse response = routingContext.response();
             response.putHeader("content-type", "text/plain");
             response.setChunked(true);

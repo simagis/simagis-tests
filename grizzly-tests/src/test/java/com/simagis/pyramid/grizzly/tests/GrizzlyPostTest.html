@@ -5,9 +5,11 @@
     <title>POST test</title>
 </head>
 <body>
-<form method="post" action="http://localhost:83/time?p1=v1&p2=v22&p2=v23">
+<form method="post"
+      accept-charset="UTF-8"
+      action="http://localhost:83/time?p1=v1&p2=значение2&p2=שלי">
     <input type="text" name="Arg1" value="MyText1">
-    <input type="text" name="Arg2" value="MyText2">
+    <input type="text" name="Arg2" value="Мой текст: טקסט שלי">
     <input type="submit">
 </form>
 </body>
