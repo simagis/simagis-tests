@@ -62,7 +62,7 @@ public class GrizzlyClientTest {
                 System.out.println("Connected to " + host + ":" + port + "; getting " + uri);
                 final HttpRequestPacket httpRequest = HttpRequestPacket.builder().method("GET")
                     .uri(uri.getPath()).query(uri.getQuery()).protocol(Protocol.HTTP_1_1)
-                    .header("Host", GrizzlyClientTest.this.uri.getHost()) // mandatory since HTTP 1.1
+                    .header("Host", host) // mandatory since HTTP 1.1
                     .header("accept-encoding", "gzip")
                     .build();
                 ctx.write(httpRequest);

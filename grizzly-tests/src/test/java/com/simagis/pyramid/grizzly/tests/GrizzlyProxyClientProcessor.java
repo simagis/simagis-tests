@@ -94,7 +94,10 @@ class GrizzlyProxyClientProcessor extends BaseFilter {
             }
 //            builder.removeHeader("accept-encoding");
             builder.removeHeader("Host");
-            builder.header("Host", serverHost + ":" + serverPort);
+            builder.header("Host", serverHost + (serverPort == 80 ? "" : ":" + serverPort));
+            // - Important: to be congruent with popular browsers, the port should be stripped from
+            // the 'Host' field when the port is 80. In other case, it is possible that the server
+            // will return "moved" response (instead of correct page) to remove port number from URL.
             this.requestToServerHeaders = builder.build();
         } finally {
             debugUnlock();

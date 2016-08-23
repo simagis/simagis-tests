@@ -7,7 +7,7 @@ import org.glassfish.grizzly.http.ContentEncoding;
 import org.glassfish.grizzly.http.HttpClientFilter;
 import org.glassfish.grizzly.http.HttpRequestPacket;
 import org.glassfish.grizzly.http.server.*;
-import org.glassfish.grizzly.http.util.Parameters;
+import org.glassfish.grizzly.http.util.*;
 import org.glassfish.grizzly.nio.transport.TCPNIOConnectorHandler;
 import org.glassfish.grizzly.nio.transport.TCPNIOTransport;
 import org.glassfish.grizzly.nio.transport.TCPNIOTransportBuilder;
@@ -23,6 +23,13 @@ import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 public class GrizzlyProxyTest {
+    static {
+        System.setProperty(
+            org.glassfish.grizzly.http.util.Constants.class.getName() + ".default-character-encoding", "UTF-8");
+        // - necessary to provide correct parsing GET and POST parameters, when encoding is not specified
+        // (typical situation for POST, always for GET)
+    }
+
     final String serverHost;
     final int serverPort;
     final int proxyPort;
@@ -161,10 +168,8 @@ public class GrizzlyProxyTest {
 
     private static Charset lookupCharset(final String enc) {
         Charset charset = org.glassfish.grizzly.http.util.Constants.DEFAULT_HTTP_CHARSET;
-            // Charsets.lookupCharset("UTF-8"); // TODO!! Q - why not so?
         if (enc != null) {
             try {
-                //TODO!! Q Why not so: Charset.forName(enc) ?
                 charset = Charsets.lookupCharset(enc);
             } catch (Exception e) {
                 // ignore possible exception

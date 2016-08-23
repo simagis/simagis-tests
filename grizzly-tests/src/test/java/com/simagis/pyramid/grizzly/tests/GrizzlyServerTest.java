@@ -3,7 +3,6 @@ package com.simagis.pyramid.grizzly.tests;
 import org.glassfish.grizzly.WriteHandler;
 import org.glassfish.grizzly.http.io.NIOOutputStream;
 import org.glassfish.grizzly.http.server.*;
-import org.glassfish.grizzly.http.util.URLDecoder;
 
 import java.io.IOException;
 import java.text.SimpleDateFormat;
@@ -11,6 +10,12 @@ import java.util.Date;
 import java.util.Locale;
 
 public class GrizzlyServerTest {
+    static {
+        System.setProperty(
+            org.glassfish.grizzly.http.util.Constants.class.getName() + ".default-character-encoding", "UTF-8");
+        // - necessary to provide correct parsing GET and POST parameters, when encoding is not specified
+        // (typical situation for POST, always for GET)
+    }
     public static void main(String[] args) throws IOException {
         HttpServer server = new HttpServer();
         server.addListener(new NetworkListener("grizzy81", "localhost", 81));
