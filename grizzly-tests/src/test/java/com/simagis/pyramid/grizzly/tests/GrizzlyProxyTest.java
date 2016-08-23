@@ -121,6 +121,7 @@ public class GrizzlyProxyTest {
                         @Override
                         public boolean onTimeout(Response response) {
                             //It is timeout from the very beginning of the request: must be large for large responses
+                            //TODO!! synchronize also response.finish from here
                             System.out.println("TIMEOUT while reading " +  request.getRequestURL());
                             response.finish();
                             clientProcessor.close();

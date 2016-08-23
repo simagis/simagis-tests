@@ -228,7 +228,6 @@ class GrizzlyProxyClientProcessor extends BaseFilter {
             throw new AssertionError("Null ctx.getMessage()");
         }
         final Buffer buffer = httpContent.getContent();
-        debugLock();
         //TODO!! Q - can we reduce synchronization
         final ByteBuffer byteBuffer = buffer.toByteBuffer();
         final byte[] bytes = byteBufferToArray(byteBuffer);
@@ -236,6 +235,7 @@ class GrizzlyProxyClientProcessor extends BaseFilter {
         final boolean last;
 //        System.out.printf("ByteBuffer limit %d, position %d, remaining %d%n",
 //            byteBuffer.limit(), byteBuffer.position(), byteBuffer.remaining());
+        debugLock();
         try {
             lastDataReceived |= httpContent.isLast();
             last = lastDataReceived || connectionClosed;
@@ -313,7 +313,10 @@ class GrizzlyProxyClientProcessor extends BaseFilter {
                     System.out.printf("Sending %s bytes (counter=%d)...%n",
                         bytes.length, currentCounter);
                     outputStream.write(bytes);
-                    //                    Thread.sleep(new java.util.Random().nextInt(1000));
+                    outputStream.flush();
+                    // - necessary to avoid a bug!
+
+//                    Thread.sleep(new java.util.Random().nextInt(1000));
 //                    System.out.printf("Sending %d bytes (counter=%d): done%n", bytesToClient.length, currentCounter);
                     if (last) {
                         close();
@@ -342,6 +345,7 @@ class GrizzlyProxyClientProcessor extends BaseFilter {
             + ", message = " + ctx.getMessage());
         // getMessage will be null
         debugLock();
+        //TODO!! extra synchronization
         try {
             connectionClosed = true;
             if (!lastDataReceived) {
