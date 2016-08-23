@@ -23,13 +23,6 @@ import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 public class GrizzlyProxyTest {
-    static {
-        System.setProperty(
-            org.glassfish.grizzly.http.util.Constants.class.getName() + ".default-character-encoding", "UTF-8");
-        // - necessary to provide correct parsing GET and POST parameters, when encoding is not specified
-        // (typical situation for POST, always for GET)
-    }
-
     final String serverHost;
     final int serverPort;
     final int proxyPort;
@@ -167,7 +160,10 @@ public class GrizzlyProxyTest {
 
 
     private static Charset lookupCharset(final String enc) {
-        Charset charset = org.glassfish.grizzly.http.util.Constants.DEFAULT_HTTP_CHARSET;
+        Charset charset = Charsets.UTF8_CHARSET;
+        // Note: we don't use org.glassfish.grizzly.http.util.Constants.DEFAULT_HTTP_CHARSET here.
+        // It is necessary to provide correct parsing GET and POST parameters, when encoding is not specified
+        // (typical situation for POST, always for GET).
         if (enc != null) {
             try {
                 charset = Charsets.lookupCharset(enc);
@@ -177,7 +173,6 @@ public class GrizzlyProxyTest {
         }
         return charset;
     }
-
 
     public static void main(String[] args) throws IOException {
         if (args.length < 3) {
