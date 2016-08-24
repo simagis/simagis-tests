@@ -57,7 +57,8 @@ public class GrizzlyProxyTest {
 //                    if (request.getRequestURI().contains("css")) {
 //                        return;
 //                    }
-                    System.out.println("Proxying " + request.getRequestURI() + " - " + request.getRequestURL());
+                    final StringBuilder requestURL = request.getRequestURL();
+                    System.out.println("Proxying " + request.getRequestURI() + " - " + requestURL);
                     System.out.println("  port: " + request.getServerPort());
                     System.out.println("  remote port: " + request.getRemotePort());
                     System.out.println("  path info: " + request.getPathInfo());
@@ -116,15 +117,13 @@ public class GrizzlyProxyTest {
                         TCPNIOConnectorHandler.builder(clientTransport)
                             .setSyncConnectTimeout(2, TimeUnit.SECONDS)
                             .processor(filterChain).build();
-                    clientProcessor.setConnectorHandler(connectorHandler);
-                    response.suspend(30, TimeUnit.SECONDS, null, new TimeoutHandler() {
+                    clientProcessor.setConnectorToServerHandler(connectorHandler);
+                    response.suspend(25, TimeUnit.SECONDS, null, new TimeoutHandler() {
                         @Override
                         public boolean onTimeout(Response response) {
                             //It is timeout from the very beginning of the request: must be large for large responses
-                            //TODO!! synchronize also response.finish from here
-                            System.out.println("TIMEOUT while reading " +  request.getRequestURL());
-                            response.finish();
-                            clientProcessor.close();
+                            System.out.println("TIMEOUT while reading " + requestURL);
+                            clientProcessor.closeConnectionsAndResponse(false);
                             return true;
                         }
                     });
