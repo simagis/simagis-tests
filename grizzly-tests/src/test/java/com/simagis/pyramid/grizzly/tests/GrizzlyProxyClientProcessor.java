@@ -117,7 +117,7 @@ class GrizzlyProxyClientProcessor extends BaseFilter {
                 public void failed(Throwable throwable) {
                     debugLock();
                     try {
-                        System.err.println("Connection failed");
+                        System.out.println("Connection to " + serverHost + ":" + serverPort + " failed: " + throwable);
                         throwable.printStackTrace();
                         closeAndReturnError("Cannot connect to the server");
                     } finally {
@@ -136,7 +136,7 @@ class GrizzlyProxyClientProcessor extends BaseFilter {
             });
     }
 
-    public void closeConnections() {
+    public void closeServerAndClientConnections() {
         debugLock();
         try {
             connectionToServerClosed = true;
@@ -155,16 +155,27 @@ class GrizzlyProxyClientProcessor extends BaseFilter {
         }
     }
 
-    public void closeConnectionsAndResponse(boolean resumeResponse) {
+    public void closeConnectionsAndResponse() {
         debugLock();
         try {
-            closeConnections();
-            if (resumeResponse) {
+            closeServerAndClientConnections();
+            response.resume();
+        } finally {
+            debugUnlock();
+        }
+    }
+
+    public void closeAndReturnError(String message) {
+        debugLock();
+        try {
+            response.setStatus(500, message);
+            closeServerAndClientConnections();
+            if (response.isSuspended()) {
                 response.resume();
-                System.out.println("Response is resumed normally");
+                System.out.println("Response is resumed due to error");
             } else {
                 response.finish();
-                System.out.println("Response is cancelled");
+                System.out.println("Response is finished due to error");
             }
         } finally {
             debugUnlock();
@@ -330,7 +341,7 @@ class GrizzlyProxyClientProcessor extends BaseFilter {
 //                    Thread.sleep(new java.util.Random().nextInt(1000));
 //                    System.out.printf("Sending %d bytes (counter=%d): done%n", bytesToClient.length, currentCounter);
                     if (last) {
-                        closeConnectionsAndResponse(true);
+                        closeConnectionsAndResponse();
                         System.out.println("Response is resumed: counter=" + currentCounter);
                     }
                 } finally {
@@ -353,13 +364,13 @@ class GrizzlyProxyClientProcessor extends BaseFilter {
     public NextAction handleClose(FilterChainContext ctx) throws IOException {
         // getMessage will be null
         if (connectionToServerClosed) {
-            // Nothing to do: maybe we already called closeConnections
+            // Nothing to do: maybe we already called closeServerAndClientConnections
             System.out.println("Connection closed, message = " + ctx.getMessage());
             return ctx.getStopAction();
         }
 
         System.out.println("UNEXPECTED CONNECTION CLOSE, message = " + ctx.getMessage());
-        closeConnectionsAndResponse(true);
+        closeConnectionsAndResponse();
         System.out.println("Response is resumed due to closing connection by server");
         return ctx.getStopAction();
     }
@@ -374,23 +385,6 @@ class GrizzlyProxyClientProcessor extends BaseFilter {
         debugLock();
         try {
             this.connectionToServer = connectionToServer;
-        } finally {
-            debugUnlock();
-        }
-    }
-
-    private void closeAndReturnError(String message) {
-        debugLock();
-        try {
-            response.setStatus(500, message);
-            closeConnections();
-            if (response.isSuspended()) {
-                response.resume();
-                System.out.println("Response is resumed due to error");
-            } else {
-                response.finish();
-                System.out.println("Response is finished due to error");
-            }
         } finally {
             debugUnlock();
         }

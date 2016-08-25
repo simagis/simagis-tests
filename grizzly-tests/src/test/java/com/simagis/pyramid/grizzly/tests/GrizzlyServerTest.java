@@ -6,6 +6,7 @@ import org.glassfish.grizzly.http.server.*;
 
 import java.io.IOException;
 import java.text.SimpleDateFormat;
+import java.util.Arrays;
 import java.util.Date;
 import java.util.Locale;
 
@@ -52,7 +53,7 @@ public class GrizzlyServerTest {
                     new Thread() {
                         @Override
                         public void run() {
-                            for (long t = System.currentTimeMillis(); System.currentTimeMillis() - t < 20000; ) {
+                            for (long t = System.currentTimeMillis(); System.currentTimeMillis() - t < 5000; ) {
                             }
                             final NIOOutputStream outputStream = response.getNIOOutputStream();
                             outputStream.notifyCanWrite(
@@ -61,9 +62,15 @@ public class GrizzlyServerTest {
                                     public void onWritePossible() throws Exception {
                                         final byte[] bytes = result.getBytes();
                                         response.setContentLength(result.length());
-                                        outputStream.write(bytes);
+                                        outputStream.write(Arrays.copyOfRange(bytes, 0, 5));
+                                        outputStream.flush();
+                                        System.out.printf("Sending 5 bytes...%n");
+                                        for (long t = System.currentTimeMillis();
+                                             System.currentTimeMillis() - t < 20000; ) {
+                                        }
+                                        System.out.printf("Sending %d bytes...%n", bytes.length - 5);
+                                        outputStream.write(Arrays.copyOfRange(bytes, 5, bytes.length));
                                         outputStream.close();
-                                        System.out.printf("Sending %d bytes...%n", bytes.length);
                                         if (response.isSuspended()) {
                                             System.out.println("Resumed");
                                             response.resume();

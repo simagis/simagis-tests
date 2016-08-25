@@ -118,12 +118,12 @@ public class GrizzlyProxyTest {
                             .setSyncConnectTimeout(2, TimeUnit.SECONDS)
                             .processor(filterChain).build();
                     clientProcessor.setConnectorToServerHandler(connectorHandler);
-                    response.suspend(25, TimeUnit.SECONDS, null, new TimeoutHandler() {
+                    response.suspend(15, TimeUnit.SECONDS, null, new TimeoutHandler() {
                         @Override
                         public boolean onTimeout(Response response) {
                             //It is timeout from the very beginning of the request: must be large for large responses
                             System.out.println("TIMEOUT while reading " + requestURL);
-                            clientProcessor.closeConnectionsAndResponse(false);
+                            clientProcessor.closeAndReturnError("Timeout");
                             return true;
                         }
                     });
