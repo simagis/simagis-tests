@@ -82,7 +82,8 @@ public class GrizzlyServerTest {
 
                                     @Override
                                     public void onError(Throwable t) {
-
+                                        System.out.println("ERROR!");
+                                        t.printStackTrace();
                                     }
                                 });
                         }
