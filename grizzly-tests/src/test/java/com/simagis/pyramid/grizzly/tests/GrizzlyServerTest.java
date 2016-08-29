@@ -61,15 +61,16 @@ public class GrizzlyServerTest {
                                     @Override
                                     public void onWritePossible() throws Exception {
                                         final byte[] bytes = result.getBytes();
+                                        final int firstPortion = Math.min(25, bytes.length);
                                         response.setContentLength(result.length());
-                                        outputStream.write(Arrays.copyOfRange(bytes, 0, 5));
+                                        outputStream.write(Arrays.copyOfRange(bytes, 0, firstPortion));
                                         outputStream.flush();
-                                        System.out.printf("Sending 5 bytes...%n");
+                                        System.out.printf("Sending %d bytes...%n", firstPortion);
                                         for (long t = System.currentTimeMillis();
                                              System.currentTimeMillis() - t < 20000; ) {
                                         }
-                                        System.out.printf("Sending %d bytes...%n", bytes.length - 5);
-                                        outputStream.write(Arrays.copyOfRange(bytes, 5, bytes.length));
+                                        System.out.printf("Sending %d bytes...%n", bytes.length - firstPortion);
+                                        outputStream.write(Arrays.copyOfRange(bytes, firstPortion, bytes.length));
                                         outputStream.close();
                                         if (response.isSuspended()) {
                                             System.out.println("Resumed");
