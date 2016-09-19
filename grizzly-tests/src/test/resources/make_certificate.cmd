@@ -1,0 +1,1 @@
+"%JAVA_HOME%\bin\keytool" -genkey -keyalg RSA -alias self-signed -keystore ssl-test-keystore.jks -storepass password -validity 3650 -keysize 2048
