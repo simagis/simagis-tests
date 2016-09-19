@@ -3,8 +3,12 @@ package com.simagis.pyramid.grizzly.tests;
 import org.glassfish.grizzly.WriteHandler;
 import org.glassfish.grizzly.http.io.NIOOutputStream;
 import org.glassfish.grizzly.http.server.*;
+import org.glassfish.grizzly.ssl.SSLContextConfigurator;
+import org.glassfish.grizzly.ssl.SSLEngineConfigurator;
 
+import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.net.URL;
 import java.text.SimpleDateFormat;
 import java.util.Arrays;
 import java.util.Date;
@@ -17,10 +21,18 @@ public class GrizzlyServerTest {
         // - necessary to provide correct parsing GET and POST parameters, when encoding is not specified
         // (typical situation for POST, always for GET)
     }
+
     public static void main(String[] args) throws IOException {
+        final boolean ssl = args.length >= 1 && args[0].equalsIgnoreCase("ssl");
+
         HttpServer server = new HttpServer();
-        server.addListener(new NetworkListener("grizzy81", "localhost", 81));
         server.addListener(new NetworkListener("grizzy82", "localhost", 82));
+        if (ssl) {
+            final NetworkListener sslListener = new NetworkListener("grizzySSL", "localhost", 9999);
+            sslListener.setSecure(true);
+            sslListener.setSSLEngineConfig(createSslConfiguration());
+            server.addListener(sslListener);
+        }
         final ServerConfiguration configuration = server.getServerConfiguration();
         configuration.addHttpHandler(new StaticHttpHandler("/LiveTms"), "/LiveTms");
         // - only files, not directories
@@ -96,5 +108,25 @@ public class GrizzlyServerTest {
         System.out.println("Press ENTER to stop the server...");
         System.in.read();
         server.shutdown();
+    }
+
+    private static SSLEngineConfigurator createSslConfiguration() throws FileNotFoundException {
+        // Initialize SSLContext configuration
+        SSLContextConfigurator sslContextConfig = new SSLContextConfigurator();
+
+        ClassLoader cl = GrizzlyServerTest.class.getClassLoader();
+        // Set key store
+        final String keystrokeFile = "ssl-test-keystore.jks";
+        URL keystoreUrl = cl.getResource(keystrokeFile);
+        if (keystoreUrl == null) {
+            throw new FileNotFoundException("Keystroke file " + keystrokeFile + " not found");
+        }
+        sslContextConfig.setKeyStoreFile(keystoreUrl.getFile());
+        sslContextConfig.setKeyStorePass("changeit");
+
+
+        // Create SSLEngine configurator
+        return new SSLEngineConfigurator(sslContextConfig.createSSLContext(),
+            false, false, false);
     }
 }
