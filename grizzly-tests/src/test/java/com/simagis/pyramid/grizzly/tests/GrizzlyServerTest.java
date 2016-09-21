@@ -123,7 +123,7 @@ public class GrizzlyServerTest {
         }
         sslContextConfig.setKeyStoreFile(keystoreUrl.getFile());
         sslContextConfig.setKeyStorePass("changeit");
-
+        sslContextConfig.setKeyPass("changeit");
 
         // Create SSLEngine configurator
         return new SSLEngineConfigurator(sslContextConfig.createSSLContext(),
