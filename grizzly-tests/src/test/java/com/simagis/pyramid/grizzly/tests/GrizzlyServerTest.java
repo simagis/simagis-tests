@@ -116,10 +116,10 @@ public class GrizzlyServerTest {
 
         ClassLoader cl = GrizzlyServerTest.class.getClassLoader();
         // Set key store
-        final String keystrokeFile = "ssl-test-keystore.jks";
-        URL keystoreUrl = cl.getResource(keystrokeFile);
+        final String keystoreFile = "ssl-test-keystore.jks";
+        URL keystoreUrl = cl.getResource(keystoreFile);
         if (keystoreUrl == null) {
-            throw new FileNotFoundException("Keystroke file " + keystrokeFile + " not found");
+            throw new FileNotFoundException("Keystore file " + keystoreFile + " not found");
         }
         sslContextConfig.setKeyStoreFile(keystoreUrl.getFile());
         sslContextConfig.setKeyStorePass("changeit");
