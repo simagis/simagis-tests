@@ -126,7 +126,7 @@ public class GrizzlyServerTest {
         sslContextConfig.setKeyPass("changeit");
 
         // Create SSLEngine configurator
-        return new SSLEngineConfigurator(sslContextConfig.createSSLContext(),
+        return new SSLEngineConfigurator(sslContextConfig.createSSLContext(true),
             false, false, false);
     }
 }

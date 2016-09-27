@@ -336,8 +336,6 @@ class GrizzlyProxyClientProcessor extends BaseFilter {
                     System.out.printf("Sending %s bytes (counter=%d)...%n",
                         bytes.length, currentCounter);
                     outputStreamToClient.write(bytes);
-                    outputStreamToClient.flush(); // - necessary to avoid a bug in Grizzly 2.3.22!
-
 //                    Thread.sleep(new java.util.Random().nextInt(1000));
 //                    System.out.printf("Sending %d bytes (counter=%d): done%n", bytesToClient.length, currentCounter);
                     if (last) {
