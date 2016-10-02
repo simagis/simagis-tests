@@ -13,6 +13,7 @@ import java.text.SimpleDateFormat;
 import java.util.Arrays;
 import java.util.Date;
 import java.util.Locale;
+import java.util.concurrent.TimeUnit;
 
 public class GrizzlyServerTest {
     static {
@@ -61,13 +62,25 @@ public class GrizzlyServerTest {
                     final String result = format.format(new Date(System.currentTimeMillis()))
                         + " at " + request.getRequestURI();
                     response.setContentType("text/plain");
-                    response.suspend();
+                    final NIOOutputStream outputStream = response.getNIOOutputStream();
+                    response.suspend(300, TimeUnit.SECONDS, null, new TimeoutHandler() {
+                        @Override
+                        public boolean onTimeout(Response response) {
+                            //It is timeout from the very beginning of the request: must be large for large responses
+                            System.out.println("TIMEOUT!!!");
+                            try {
+                                outputStream.close();
+                            } catch (IOException ignored) {
+                            }
+                            request.getRequest().getConnection().closeSilently();
+                            return true;
+                        }
+                    });
                     new Thread() {
                         @Override
                         public void run() {
                             for (long t = System.currentTimeMillis(); System.currentTimeMillis() - t < 5000; ) {
                             }
-                            final NIOOutputStream outputStream = response.getNIOOutputStream();
                             outputStream.notifyCanWrite(
                                 new WriteHandler() {
                                     @Override
@@ -75,6 +88,7 @@ public class GrizzlyServerTest {
                                         final byte[] bytes = result.getBytes();
                                         final int firstPortion = Math.min(25, bytes.length);
                                         response.setContentLength(result.length());
+                                        //TODO!! reset timeout
                                         outputStream.write(Arrays.copyOfRange(bytes, 0, firstPortion));
                                         outputStream.flush();
                                         System.out.printf("Sending %d bytes...%n", firstPortion);
@@ -82,6 +96,7 @@ public class GrizzlyServerTest {
                                              System.currentTimeMillis() - t < 20000; ) {
                                         }
                                         System.out.printf("Sending %d bytes...%n", bytes.length - firstPortion);
+                                        //TODO!! reset timeout
                                         outputStream.write(Arrays.copyOfRange(bytes, firstPortion, bytes.length));
                                         outputStream.close();
                                         if (response.isSuspended()) {
