@@ -63,7 +63,8 @@ public class GrizzlyServerTest {
                         + " at " + request.getRequestURI();
                     response.setContentType("text/plain");
                     final NIOOutputStream outputStream = response.getNIOOutputStream();
-                    response.suspend(300, TimeUnit.SECONDS, null, new TimeoutHandler() {
+                    final SuspendContext suspendContext = response.getSuspendContext();
+                    response.suspend(10, TimeUnit.SECONDS, null, new TimeoutHandler() {
                         @Override
                         public boolean onTimeout(Response response) {
                             //It is timeout from the very beginning of the request: must be large for large responses
@@ -88,17 +89,17 @@ public class GrizzlyServerTest {
                                         final byte[] bytes = result.getBytes();
                                         final int firstPortion = Math.min(25, bytes.length);
                                         response.setContentLength(result.length());
-                                        //TODO!! reset timeout
+                                        resetTimeout();
                                         outputStream.write(Arrays.copyOfRange(bytes, 0, firstPortion));
                                         outputStream.flush();
-                                        System.out.printf("Sending %d bytes...%n", firstPortion);
+                                        System.out.printf("%d bytes sent...%n", firstPortion);
                                         for (long t = System.currentTimeMillis();
                                              System.currentTimeMillis() - t < 20000; ) {
                                         }
-                                        System.out.printf("Sending %d bytes...%n", bytes.length - firstPortion);
-                                        //TODO!! reset timeout
+                                        resetTimeout();
                                         outputStream.write(Arrays.copyOfRange(bytes, firstPortion, bytes.length));
                                         outputStream.close();
+                                        System.out.printf("%d bytes sent...%n", bytes.length - firstPortion);
                                         if (response.isSuspended()) {
                                             System.out.println("Resumed");
                                             response.resume();
@@ -112,6 +113,10 @@ public class GrizzlyServerTest {
                                     public void onError(Throwable t) {
                                         System.out.println("ERROR!");
                                         t.printStackTrace();
+                                    }
+
+                                    public void resetTimeout() {
+                                        suspendContext.setTimeout(25, TimeUnit.SECONDS);
                                     }
                                 });
                         }
