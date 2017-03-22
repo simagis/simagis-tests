@@ -49,6 +49,7 @@ public class GrizzlyServerTest {
                     System.out.println("  context: " + request.getContextPath());
                     System.out.println("  encoding: " + request.getCharacterEncoding());
                     System.out.println("  query: " + request.getQueryString());
+                    final boolean quick = "quick".equals(request.getQueryString());
                     for (String name : request.getParameterNames()) {
                         System.out.printf("%s: %s%n", name, request.getParameter(name));
                     }
@@ -64,7 +65,7 @@ public class GrizzlyServerTest {
                     response.setContentType("text/plain");
                     final NIOOutputStream outputStream = response.getNIOOutputStream();
                     final SuspendContext suspendContext = response.getSuspendContext();
-                    response.suspend(10, TimeUnit.SECONDS, null, new TimeoutHandler() {
+                    response.suspend(30, TimeUnit.SECONDS, null, new TimeoutHandler() {
                         @Override
                         public boolean onTimeout(Response response) {
                             //It is timeout from the very beginning of the request: must be large for large responses
@@ -80,7 +81,9 @@ public class GrizzlyServerTest {
                     new Thread() {
                         @Override
                         public void run() {
-                            for (long t = System.currentTimeMillis(); System.currentTimeMillis() - t < 5000; ) {
+                            if (!quick) {
+                                for (long t = System.currentTimeMillis(); System.currentTimeMillis() - t < 4000; ) {
+                                }
                             }
                             outputStream.notifyCanWrite(
                                 new WriteHandler() {
@@ -93,8 +96,10 @@ public class GrizzlyServerTest {
                                         outputStream.write(Arrays.copyOfRange(bytes, 0, firstPortion));
                                         outputStream.flush();
                                         System.out.printf("%d bytes sent...%n", firstPortion);
-                                        for (long t = System.currentTimeMillis();
-                                             System.currentTimeMillis() - t < 20000; ) {
+                                        if (!quick) {
+                                            for (long t = System.currentTimeMillis();
+                                                 System.currentTimeMillis() - t < 2000; ) {
+                                            }
                                         }
                                         resetTimeout();
                                         outputStream.write(Arrays.copyOfRange(bytes, firstPortion, bytes.length));
